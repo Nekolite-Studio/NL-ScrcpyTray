@@ -18,22 +18,29 @@ USBデバイスの接続を自動的に検知し、ユーザーが定義した�
 graph TD
     subgraph "NL-ScrcpyTray Process"
         UI(NotifyIcon) -- User Input --> AppCore
-        AppCore(AppCore / Program.cs) -- Controls --> ScrcpyProcessManager
-        AppCore -- Manages --> SettingsManager
+        AppCore(AppCore / Program.cs) -- Opens --> SettingsForm(SettingsForm.cs)
+        AppCore -- Controls --> ScrcpyProcessManager
+        AppCore -- Uses --> AdbHelper(AdbHelper.cs)
         DeviceWatcher(DeviceWatcher / WMI) -- Event --> AppCore
+        
+        SettingsForm -- Manages --> SettingsManager
         SettingsManager(SettingsManager) -- R/W --> ConfigFile([settings.json])
     end
 
     ScrcpyProcessManager -- Starts/Stops --> ScrcpyProcess(scrcpy.exe)
+    AdbHelper -- Executes --> AdbProcess(adb.exe)
 
     subgraph "External Dependencies"
         ScrcpyProcess
+        AdbProcess
         ConfigFile
     end
 
     style UI fill:#cde,stroke:#333,stroke-width:2px
     style DeviceWatcher fill:#f9f,stroke:#333,stroke-width:2px
     style SettingsManager fill:#fdc,stroke:#333,stroke-width:2px
+    style SettingsForm fill:#bbf,stroke:#333,stroke-width:2px
+    style AdbHelper fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
 ## 4. コンポーネント詳細
@@ -78,6 +85,22 @@ graph TD
     -   `settings.json` ファイルの読み込みと書き込みを担当します。
     -   `System.Text.Json` を利用して、設定クラスとJSON文字列との間でシリアライズ/デシリアライズを行います。
     -   設定ファイルが存在しない場合は、デフォルト設定で新規作成します。
+    -   現在、この責務は `Program.cs` 内の `static` メソッド (`SaveConfig`, `LoadConfig`) が担っています。
+
+### 4.6. SettingsForm (SettingsForm.cs)
+
+-   **責務:** GUIによる設定変更インターフェースを提供します。
+-   **機能:**
+    -   `AppConfig` オブジェクトを受け取り、現在の設定値をフォーム上に表示します。
+    -   ユーザーによる変更を `AppConfig` オブジェクトに書き戻します。
+    -   「保存して適用」がクリックされたことを `AppCore` に通知します。
+
+### 4.7. AdbHelper (AdbHelper.cs)
+
+-   **責務:** `adb.exe` コマンドの実行と、その結果の解析を専門に担当します。
+-   **機能:**
+    -   同梱された `adb.exe` のパスを解決します。
+    -   `adb devices -l` を実行し、接続されているデバイスのシリアル番号やモデル名を取得してリストとして返します。
 
 ## 5. ディレクトリ構成
 

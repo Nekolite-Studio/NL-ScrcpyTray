@@ -1,9 +1,9 @@
 {
   "ScrcpyPath": "scrcpy/scrcpy.exe",
-  "AutoStartOnConnect": true,
+  "AutoStartOnConnect": false,
   "EnableVideo": false,
   "EnableAudio": true,
   "TurnScreenOffOnStart": false,
-  "BufferMode": "High Quality",
-  "AdbDeviceSerial": null
+  "BufferMode": "Low Latency",
+  "AdbDeviceSerial": "470808182974"
 }
