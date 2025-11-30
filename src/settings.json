@@ -1,0 +1,9 @@
+{
+  "ScrcpyPath": "scrcpy/scrcpy.exe",
+  "AutoStartOnConnect": true,
+  "EnableVideo": false,
+  "EnableAudio": true,
+  "TurnScreenOffOnStart": false,
+  "BufferMode": "High Quality",
+  "AdbDeviceSerial": null
+}

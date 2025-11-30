@@ -2,30 +2,45 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Management;
+using System.IO;
+using System.Text.Json;
 using System.Windows.Forms;
 
 namespace ScrcpyTray
 {
-    static class Program    {
-        static string ScrcpyPath = @"D:\Portable_Apps\scrcpy-win64-v3.3.3\scrcpy.exe";
-        
-        // Null許容型 (?) にして警告を回避
-        static Process? currentProcess = null;
-        static NotifyIcon? trayIcon;
-        
-        // 設定値
-        static bool AutoStart = true;
-        static bool EnableVideo = false;
-        static bool EnableAudio = true;
-        static bool TurnScreenOff = false;
-        static string BufferMode = "Low Latency"; // "Low Latency" or "High Quality"
+    // feature-spec.md に基づく設定クラス
+    public class AppConfig
+    {
+        public string ScrcpyPath { get; set; } = "scrcpy/scrcpy.exe";
+        public bool AutoStartOnConnect { get; set; } = true;
+        public bool EnableVideo { get; set; } = true;
+        public bool EnableAudio { get; set; } = true;
+        public bool TurnScreenOffOnStart { get; set; } = false;
+        public string BufferMode { get; set; } = "Low Latency"; // "Low Latency" or "High Quality"
+        public string? AdbDeviceSerial { get; set; } = null;
+    }
 
-        [STAThread]
-        static void Main()
-        {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            // トレイアイコンの作成
+    static class Program
+    {
+        private const string ConfigFileName = "settings.json";
+
+        // 設定は AppConfig クラスで一元管理
+        static AppConfig config = new();
+
+        // Null許容型 (?) にして警告を回避
+        static Process? currentProcess = null;
+        static NotifyIcon? trayIcon;
+
+[STAThread]
+static void Main()
+{
+    Application.EnableVisualStyles();
+    Application.SetCompatibleTextRenderingDefault(false);
+
+    // 設定ファイルの読み込み
+    LoadConfig();
+
+    // トレイアイコンの作成
             trayIcon = new NotifyIcon()
             {
                 Icon = SystemIcons.Application, // アプリのデフォルトアイコンを使用
@@ -64,40 +79,40 @@ namespace ScrcpyTray
             menu.Items.Add(statusItem);
 
             menu.Items.Add(new ToolStripSeparator());
-            // 2. 設定：自動開始
-            var autoItem = new ToolStripMenuItem("USB接続で自動開始");
-            autoItem.Checked = AutoStart;
-            autoItem.Click += (s, e) => { AutoStart = !AutoStart; UpdateContextMenu(); };
-            menu.Items.Add(autoItem);
+// 2. 設定：自動開始
+var autoItem = new ToolStripMenuItem("USB接続で自動開始");
+autoItem.Checked = config.AutoStartOnConnect;
+autoItem.Click += (s, e) => { config.AutoStartOnConnect = !config.AutoStartOnConnect; SaveConfig(); UpdateContextMenu(); };
+menu.Items.Add(autoItem);
 
-            // 3. 設定：ビデオ/オーディオ
-            var videoItem = new ToolStripMenuItem("画面を共有");
-            videoItem.Checked = EnableVideo;
-            videoItem.Click += (s, e) => { EnableVideo = !EnableVideo; UpdateContextMenu(); };
-            menu.Items.Add(videoItem);
-            var audioItem = new ToolStripMenuItem("音声を共有");
-            audioItem.Checked = EnableAudio;
-            audioItem.Click += (s, e) => { EnableAudio = !EnableAudio; UpdateContextMenu(); };
-            menu.Items.Add(audioItem);
-            
-            // 4. 設定：画面オフ
-            var screenOffItem = new ToolStripMenuItem("端末画面をOFF (-S)");
-            screenOffItem.Checked = TurnScreenOff;
-            screenOffItem.Click += (s, e) => { TurnScreenOff = !TurnScreenOff; UpdateContextMenu(); };
+// 3. 設定：ビデオ/オーディオ
+var videoItem = new ToolStripMenuItem("画面を共有");
+videoItem.Checked = config.EnableVideo;
+videoItem.Click += (s, e) => { config.EnableVideo = !config.EnableVideo; SaveConfig(); UpdateContextMenu(); };
+menu.Items.Add(videoItem);
+var audioItem = new ToolStripMenuItem("音声を共有");
+audioItem.Checked = config.EnableAudio;
+audioItem.Click += (s, e) => { config.EnableAudio = !config.EnableAudio; SaveConfig(); UpdateContextMenu(); };
+menu.Items.Add(audioItem);
+
+// 4. 設定：画面オフ
+var screenOffItem = new ToolStripMenuItem("端末画面をOFF (-S)");
+screenOffItem.Checked = config.TurnScreenOffOnStart;
+screenOffItem.Click += (s, e) => { config.TurnScreenOffOnStart = !config.TurnScreenOffOnStart; SaveConfig(); UpdateContextMenu(); };
             menu.Items.Add(screenOffItem);
 
             menu.Items.Add(new ToolStripSeparator());
             // 5. バッファ設定テンプレート
             var bufferMenu = new ToolStripMenuItem("モード設定");
             
-            var lowLatItem = new ToolStripMenuItem("低遅延 (Dev/Game)");
-            lowLatItem.Enabled = (BufferMode != "Low Latency");
-            lowLatItem.Click += (s, e) => { BufferMode = "Low Latency"; UpdateContextMenu(); };
-            bufferMenu.DropDownItems.Add(lowLatItem);
+var lowLatItem = new ToolStripMenuItem("低遅延 (Dev/Game)");
+lowLatItem.Checked = (config.BufferMode == "Low Latency");
+lowLatItem.Click += (s, e) => { config.BufferMode = "Low Latency"; SaveConfig(); UpdateContextMenu(); };
+bufferMenu.DropDownItems.Add(lowLatItem);
 
-            var hqItem = new ToolStripMenuItem("高画質 (Media)");
-            hqItem.Enabled = (BufferMode != "High Quality");
-            hqItem.Click += (s, e) => { BufferMode = "High Quality"; UpdateContextMenu(); };
+var hqItem = new ToolStripMenuItem("高画質 (Media)");
+hqItem.Checked = (config.BufferMode == "High Quality");
+hqItem.Click += (s, e) => { config.BufferMode = "High Quality"; SaveConfig(); UpdateContextMenu(); };
             bufferMenu.DropDownItems.Add(hqItem);
             menu.Items.Add(bufferMenu);
 
@@ -116,13 +131,13 @@ namespace ScrcpyTray
             if (trayIcon == null) return;
             string args = "";
 
-            // 基本設定
-            if (!EnableVideo) args += " --no-video";
-            if (!EnableAudio) args += " --no-audio";
-            if (TurnScreenOff) args += " -S";
-            
-            // テンプレート適用
-            if (BufferMode == "Low Latency")
+// 基本設定
+if (!config.EnableVideo) args += " --no-video";
+if (!config.EnableAudio) args += " --no-audio";
+if (config.TurnScreenOffOnStart) args += " -S";
+
+// テンプレート適用
+if (config.BufferMode == "Low Latency")
             {
                 args += " --audio-buffer=50 --video-buffer=0 --max-size=1024";
             }
@@ -130,13 +145,16 @@ namespace ScrcpyTray
             {
                 args += " --audio-buffer=200 --video-buffer=200 --video-bit-rate=16M";
             }
-            // コンソールなしで起動
-            args += " --no-window"; 
+// コンソールなしで起動
+args += " --no-window";
 
-            ProcessStartInfo psi = new ProcessStartInfo
-            {
-                FileName = ScrcpyPath,
-                Arguments = args,
+            // 実行ファイルの場所からの相対パスを解決
+            string fullScrcpyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, config.ScrcpyPath);
+
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = fullScrcpyPath,
+Arguments = args,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
@@ -146,34 +164,29 @@ namespace ScrcpyTray
                 if (currentProcess != null)
                 {
                     currentProcess.EnableRaisingEvents = true;
-                    currentProcess.Exited += (s, e) => {
-                        currentProcess = null;
-                        if (trayIcon != null)
-                        {
-                            // UIスレッドでの操作が必要な場合があるためInvoke推奨ですが、
-                            // NotifyIconのプロパティ変更はスレッドセーフな場合が多いです。
-                            // 念の為のInvokeパターン:
-                            // trayIcon.GetType().InvokeMember(...) 等が必要になることがありますが
-                            // フォームレスの場合は直接変更して問題が出なければそのままでOK
-                            trayIcon.Text = "NL-ScrcpyTray (待機中)";
-                            trayIcon.Icon = SystemIcons.Application;
-                            
-                            // メニュー再構築（非UIスレッドから呼ばれる可能性への配慮）
-                            // 厳密にはここもInvokeが必要ですが、簡易実装として再構築を呼びます
-                            // エラーが出る場合はここにInvoke処理を追加します
-                            UpdateContextMenu(); 
-                        }
-                    };
+currentProcess.Exited += (s, e) => {
+    currentProcess = null;
+    if (trayIcon != null)
+    {
+        trayIcon.Text = "NL-ScrcpyTray (待機中)";
+        trayIcon.Icon = SystemIcons.Application;
+        trayIcon.ShowBalloonTip(1000, "デバイス切断", "画面転送が終了しました。", ToolTipIcon.Info);
+        
+        // メニュー再構築（非UIスレッドから呼ばれる可能性への配慮）
+        UpdateContextMenu();
+    }
+};
 
-                    trayIcon.Text = "NL-ScrcpyTray (実行中)";
-                    UpdateContextMenu();
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("起動エラー: " + ex.Message);
-            }
-        }
+trayIcon.Text = "NL-ScrcpyTray (実行中)";
+trayIcon.ShowBalloonTip(1000, "実行中", "画面転送を開始しました。", ToolTipIcon.Info);
+UpdateContextMenu();
+}
+}
+catch (Exception ex)
+{
+trayIcon?.ShowBalloonTip(1000, "起動エラー", $"scrcpyの起動に失敗しました。\n{ex.Message}", ToolTipIcon.Error);
+}
+}
         static void StopScrcpy()
         {
             if (currentProcess != null && !currentProcess.HasExited)
@@ -182,24 +195,67 @@ namespace ScrcpyTray
                 currentProcess = null;
             }
             UpdateContextMenu();
-        }
+}
 
-        static void StartUsbWatcher()
-        {
+// 設定をJSONファイルに保存
+static void SaveConfig()
+{
+    try
+    {
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        string jsonString = JsonSerializer.Serialize(config, options);
+        File.WriteAllText(ConfigFileName, jsonString);
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show("設定の保存に失敗しました: " + ex.Message);
+    }
+}
+
+// JSONファイルから設定を読み込み
+static void LoadConfig()
+{
+    try
+    {
+        if (File.Exists(ConfigFileName))
+        {
+            string jsonString = File.ReadAllText(ConfigFileName);
+            var loadedConfig = JsonSerializer.Deserialize<AppConfig>(jsonString);
+            if (loadedConfig != null)
+            {
+                config = loadedConfig;
+            }
+        }
+        else
+        {
+            // 設定ファイルがなければデフォルトで作成
+            SaveConfig();
+        }
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show("設定の読み込みに失敗しました: " + ex.Message);
+        // 読み込みに失敗した場合はデフォルト設定で続行
+    }
+}
+
+static void StartUsbWatcher()
+{
             try
             {
                 // USBデバイス変更イベント監視
                 WqlEventQuery query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2");
                 ManagementEventWatcher watcher = new ManagementEventWatcher(query);
                 
-                watcher.EventArrived += (s, e) =>
-                {
-                    if (AutoStart && currentProcess == null)
-                    {
-                        // 接続直後は認識されないことがあるため少し待機
-                        System.Threading.Thread.Sleep(2000);
-                        StartScrcpy();
-                    }
+watcher.EventArrived += (s, e) =>
+{
+    if (config.AutoStartOnConnect && currentProcess == null)
+    {
+        trayIcon?.ShowBalloonTip(1000, "デバイス接続", "デバイスが接続されました。scrcpyを開始します。", ToolTipIcon.Info);
+        // 接続直後は認識されないことがあるため少し待機
+        System.Threading.Thread.Sleep(2000);
+        StartScrcpy();
+    }
                 };
                 watcher.Start();
             }
