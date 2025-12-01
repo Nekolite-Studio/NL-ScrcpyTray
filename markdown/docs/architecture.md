@@ -16,22 +16,18 @@
 
 ```mermaid
 graph TD
-    subgraph "UI Layer (WPF + WebView2)"
-        WpfWindow[WPF Window]
-        WebView2[WebView2 Browser]
-        ReactApp[React Frontend]
-        
-        WpfWindow -- hosts --> WebView2
-        WebView2 -- renders --> ReactApp
+    subgraph "UI Layer (React in WebView2)"
+        ReactApp[React UI]
     end
 
     subgraph "Backend Layer (C#)"
-        AppCore(AppCore / App.xaml.cs)
+        WpfWindow[WPF Window]
+        WebView2[WebView2 Browser]
+        AppCore(App / App.xaml.cs)
         DeviceManager(DeviceManager.cs)
         ScrcpyProcessManager(ScrcpyProcessManager.cs)
         SettingsManager(SettingsManager.cs)
         AdbHelper(AdbHelper.cs)
-        DeviceWatcher(DeviceWatcher / WMI)
     end
 
     subgraph "Data & External"
@@ -41,14 +37,20 @@ graph TD
     end
     
     %% Interactions
-    AppCore -- Manages --> WpfWindow
-    ReactApp -- Two-way Binding --> WebView2Bridge(WebView2 Bridge)
-    WebView2Bridge -- Interacts with --> DeviceManager
+    WpfWindow -- hosts --> WebView2
+    WebView2 -- renders --> ReactApp
     
+    AppCore -- Manages --> WpfWindow
+    
+    ReactApp -- Calls JS Functions --> WebView2Bridge(WebView2 Bridge)
+    WebView2Bridge -- Calls C# Methods --> DeviceManager
+    
+    DeviceManager -- Notifies --> WpfWindow
+    WpfWindow -- Executes JS --> ReactApp
+
     DeviceManager -- Uses --> SettingsManager
     DeviceManager -- Uses --> AdbHelper
     DeviceManager -- Uses --> ScrcpyProcessManager
-    DeviceManager -- Listens to --> DeviceWatcher
     
     SettingsManager -- R/W --> ConfigFile
     ScrcpyProcessManager -- Starts/Stops --> ScrcpyProcess
@@ -69,7 +71,7 @@ graph TD
 -   **コンポーネント:**
     -   **WPF Window:** アプリケーションのネイティブウィンドウ。WebView2コントロールをホストします。
     -   **WebView2:** Reactで構築されたWebベースのUIをレンダリングするブラウザエンジン。
-    -   **React Frontend:** `mockups/setting-ui/1.html` に基づくUIの実体。デバイスリスト、設定モーダルなどを描画します。
+    -   **React Frontend:** `frontend/` ディレクトリに格納されたReact/Viteプロジェクト。コンポーネントベースで構築され、デバイスリスト、設定モーダルなどのUIを動的に描画します。
     -   **WebView2 Bridge:** React (JavaScript) と C# バックエンド間の通信を仲介する重要な役割を担います。UIからの操作をバックエンドに伝え、バックエンドからの状態変更をUIにプッシュします。
 
 ### 4.2. AppCore (App.xaml.cs)
@@ -100,9 +102,9 @@ graph TD
 
 ### 4.5. DeviceWatcher (WMI)
 
--   **責務:** (変更なし) USBデバイスの物理的な接続・切断イベントを監視します。
+-   **責務:** (WMIによる監視からポーリングに変更) USBデバイスの接続・切断を定期的に検知します。
 -   **機能:**
-    -   `Win32_DeviceChangeEvent` を監視し、イベントを `DeviceManager` に通知します。
+    -   `DeviceManager`内の`Timer`により、定期的に`AdbHelper.GetConnectedDevices`を実行し、デバイスリストの差分を検出します。
 
 ### 4.6. SettingsManager
 

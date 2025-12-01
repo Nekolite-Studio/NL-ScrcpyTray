@@ -57,10 +57,12 @@
   },
 
   // 録画設定
-  "RecordVideo": false,
-  "RecordAudio": false,
-  "RecordFormat": "mp4", // "mp4" or "mkv"
-  "SavePath": "C:\\Users\\User\\Videos\\Scrcpy"
+  "Recording": {
+    "RecordVideo": false,
+    "RecordAudio": false,
+    "RecordFormat": "mp4", // "mp4" or "mkv"
+    "SavePath": "C:\\Users\\User\\Videos\\Scrcpy"
+  }
 }
 ```
 
