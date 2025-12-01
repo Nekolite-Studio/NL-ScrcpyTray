@@ -7,93 +7,111 @@
 
 ## 2. 概要
 
-`NL-ScrcpyTray` は、Androidデバイスの画面をPCにミラーリングするツール `scrcpy` を、Windowsのタスクトレイから容易に利用できるようにする常駐型アプリケーションです。
-USBデバイスの接続を自動的に検知し、ユーザーが定義した設定に基づいて `scrcpy` を起動・制御します。
+`NL-ScrcpyTray` は、`scrcpy` を強力に補完するWindows常駐型アプリケーションです。
+**WPF (または WinUI 3) と WebView2 (React) を組み合わせた最新のUI** を採用し、複数デバイスの管理、有線/無線のシームレスな切り替え、詳細なプロファイル設定など、高度な機能を提供します。
 
 ## 3. アーキテクチャ図
 
-アプリケーションは以下の主要コンポーネントで構成されます。
+アプリケーションは、C#で記述されたバックエンドと、Reactで記述されたフロントエンドから構成されます。
 
 ```mermaid
 graph TD
-    subgraph "NL-ScrcpyTray Process"
-        UI(NotifyIcon) -- User Input --> AppCore
-        AppCore(AppCore / Program.cs) -- Opens --> SettingsForm(SettingsForm.cs)
-        AppCore -- Controls --> ScrcpyProcessManager
-        AppCore -- Uses --> AdbHelper(AdbHelper.cs)
-        DeviceWatcher(DeviceWatcher / WMI) -- Event --> AppCore
+    subgraph "UI Layer (WPF + WebView2)"
+        WpfWindow[WPF Window]
+        WebView2[WebView2 Browser]
+        ReactApp[React Frontend]
         
-        SettingsForm -- Manages --> SettingsManager
-        SettingsManager(SettingsManager) -- R/W --> ConfigFile([settings.json])
+        WpfWindow -- hosts --> WebView2
+        WebView2 -- renders --> ReactApp
     end
 
-    ScrcpyProcessManager -- Starts/Stops --> ScrcpyProcess(scrcpy.exe)
-    AdbHelper -- Executes --> AdbProcess(adb.exe)
-
-    subgraph "External Dependencies"
-        ScrcpyProcess
-        AdbProcess
-        ConfigFile
+    subgraph "Backend Layer (C#)"
+        AppCore(AppCore / App.xaml.cs)
+        DeviceManager(DeviceManager.cs)
+        ScrcpyProcessManager(ScrcpyProcessManager.cs)
+        SettingsManager(SettingsManager.cs)
+        AdbHelper(AdbHelper.cs)
+        DeviceWatcher(DeviceWatcher / WMI)
     end
 
-    style UI fill:#cde,stroke:#333,stroke-width:2px
-    style DeviceWatcher fill:#f9f,stroke:#333,stroke-width:2px
-    style SettingsManager fill:#fdc,stroke:#333,stroke-width:2px
-    style SettingsForm fill:#bbf,stroke:#333,stroke-width:2px
-    style AdbHelper fill:#bbf,stroke:#333,stroke-width:2px
+    subgraph "Data & External"
+        ConfigFile([settings.json])
+        ScrcpyProcess(scrcpy.exe)
+        AdbProcess(adb.exe)
+    end
+    
+    %% Interactions
+    AppCore -- Manages --> WpfWindow
+    ReactApp -- Two-way Binding --> WebView2Bridge(WebView2 Bridge)
+    WebView2Bridge -- Interacts with --> DeviceManager
+    
+    DeviceManager -- Uses --> SettingsManager
+    DeviceManager -- Uses --> AdbHelper
+    DeviceManager -- Uses --> ScrcpyProcessManager
+    DeviceManager -- Listens to --> DeviceWatcher
+    
+    SettingsManager -- R/W --> ConfigFile
+    ScrcpyProcessManager -- Starts/Stops --> ScrcpyProcess
+    AdbHelper -- Executes --> AdbProcess
+
+    %% Styling
+    style ReactApp fill:#61DAFB,stroke:#333,stroke-width:2px
+    style WpfWindow fill:#0E78D3,stroke:#333,stroke-width:2px,color:#fff
+    style DeviceManager fill:#9b59b6,stroke:#333,stroke-width:2px,color:#fff
+    style WebView2Bridge fill:#f1c40f,stroke:#333,stroke-width:2px
 ```
 
 ## 4. コンポーネント詳細
 
-### 4.1. UI (NotifyIcon)
+### 4.1. UI (WPF + WebView2 + React)
 
--   **責務:** ユーザーインターフェースを提供します。
+-   **責務:** 高度でインタラクティブなユーザーインターフェースを提供します。
+-   **コンポーネント:**
+    -   **WPF Window:** アプリケーションのネイティブウィンドウ。WebView2コントロールをホストします。
+    -   **WebView2:** Reactで構築されたWebベースのUIをレンダリングするブラウザエンジン。
+    -   **React Frontend:** `mockups/setting-ui/1.html` に基づくUIの実体。デバイスリスト、設定モーダルなどを描画します。
+    -   **WebView2 Bridge:** React (JavaScript) と C# バックエンド間の通信を仲介する重要な役割を担います。UIからの操作をバックエンドに伝え、バックエンドからの状態変更をUIにプッシュします。
+
+### 4.2. AppCore (App.xaml.cs)
+
+-   **責務:** WPFアプリケーションのライフサイクル管理と、バックエンドサービスの初期化を担当します。
 -   **機能:**
-    -   タスクトレイにアイコンを表示し、アプリケーションの状態（待機中/実行中）を示します。
-    -   コンテキストメニュー（右クリック）を提供し、手動での起動/停止、設定変更、アプリケーションの終了といった操作を受け付けます。
-    -   `scrcpy` の実行状態やデバイスの接続状況に応じて、バルーンチップ通知を表示します。
+    -   アプリケーション起動時に、各マネージャークラス（`DeviceManager` など）をインスタンス化します。
+    -   メインウィンドウ (`WpfWindow`) を生成し、表示します。
+    -   アプリケーション終了時のクリーンアップ処理を行います。
 
-### 4.2. AppCore (Program.cs)
+### 4.3. DeviceManager (New)
 
--   **責務:** アプリケーション全体のライフサイクルと、各コンポーネント間の連携を管理する中核。
+-   **責務:** **アプリケーションの頭脳。** 接続されている全デバイスの状態を一元管理し、ユーザー操作やイベントに応じて適切な処理をディスパッチします。
 -   **機能:**
-    -   アプリケーションの起動と終了処理を制御します。
-    -   `DeviceWatcher` からのイベントを受け取り、`AutoStart` 設定に基づいて `ScrcpyProcessManager` に `scrcpy` の起動を指示します。
-    -   `UI` からのユーザー操作を解釈し、適切な処理をディスパッチします。
-    -   `SettingsManager` を通じて設定を読み込み、アプリケーションの挙動に反映させます。
+    -   `DeviceWatcher` からの物理的な接続/切断イベントを購読します。
+    -   定期的に `AdbHelper.GetConnectedDevices` を実行し、デバイスの状態（USB/Wi-Fi/Offline）を更新します。
+    -   `SettingsManager` から読み込んだ設定に基づき、自動接続、有線/無線ハンドオーバーなどのロジックを実行します。
+    -   `WebView2 Bridge` を介して、UIにデバイスリストの変更を通知します。
+    -   UIからの操作（ミラーリング開始/停止、設定変更など）を受け取り、`ScrcpyProcessManager` や `SettingsManager` に処理を委譲します。
 
-### 4.3. ScrcpyProcessManager
+### 4.4. ScrcpyProcessManager
 
--   **責務:** `scrcpy.exe` プロセスの起動と停止を専門に担当します。
+-   **責務:** `scrcpy.exe` プロセスの起動と管理を専門に担当します。**複数インスタンスの管理能力**が追加されます。
 -   **機能:**
-    -   `SettingsManager` から取得した設定値（画質、オーディオ有無など）を基に、`scrcpy.exe` のコマンドライン引数を構築します。
-    -   `Process.Start()` を用いて `scrcpy` プロセスを生成・起動します。
-    -   `scrcpy` プロセスが予期せず終了したことを検知し、`AppCore` に通知します。
-    -   アプリケーション終了時やユーザーの指示により、起動中の `scrcpy` プロセスを安全に終了させます。
+    -   デバイスごとの設定プロファイルに基づき、`scrcpy.exe` のコマンドライン引数を構築します。
+    -   **デバイスIDをキーとして**、実行中の `scrcpy` プロセスを辞書などで管理します。
+    -   指定されたデバイスのプロセスを起動、または安全に終了させます。
 
-### 4.4. DeviceWatcher (WMI)
+### 4.5. DeviceWatcher (WMI)
 
--   **責務:** Windows Management Instrumentation (WMI) を利用して、USBデバイスの物理的な接続・切断イベントを監視します。
+-   **責務:** (変更なし) USBデバイスの物理的な接続・切断イベントを監視します。
 -   **機能:**
-    -   `Win32_DeviceChangeEvent` (EventType=2) を監視し、USBデバイスが接続された際にイベントを発生させます。
-    -   発生したイベントを `AppCore` に通知します。
+    -   `Win32_DeviceChangeEvent` を監視し、イベントを `DeviceManager` に通知します。
 
-### 4.5. SettingsManager
+### 4.6. SettingsManager
 
--   **責務:** アプリケーションの設定を永続化します。
+-   **責務:** アプリケーション設定の永続化を担当します。**マルチデバイス対応の複雑なデータ構造**を扱います。
 -   **機能:**
-    -   `settings.json` ファイルの読み込みと書き込みを担当します。
-    -   `System.Text.Json` を利用して、設定クラスとJSON文字列との間でシリアライズ/デシリアライズを行います。
-    -   設定ファイルが存在しない場合は、デフォルト設定で新規作成します。
-    -   現在、この責務は `Program.cs` 内の `static` メソッド (`SaveConfig`, `LoadConfig`) が担っています。
+    -   `feature-spec.md` で定義された新しい `settings.json` 構造の読み込みと書き込みを行います。
+    -   デバイスの追加、削除、並べ替えなどの操作をサポートします。
 
-### 4.6. SettingsForm (SettingsForm.cs)
-
--   **責務:** GUIによる設定変更インターフェースを提供します。
--   **機能:**
-    -   `AppConfig` オブジェクトを受け取り、現在の設定値をフォーム上に表示します。
-    -   ユーザーによる変更を `AppConfig` オブジェクトに書き戻します。
-    -   「保存して適用」がクリックされたことを `AppCore` に通知します。
+### 4.7. AdbHelper (AdbHelper.cs)
 
 ### 4.7. AdbHelper (AdbHelper.cs)
 

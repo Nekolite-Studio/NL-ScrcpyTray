@@ -1,0 +1,1026 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Smartphone, 
+  Wifi, 
+  Cable, 
+  Play, 
+  Settings, 
+  Zap, 
+  Power,
+  Monitor,
+  Trash2,
+  List as ListIcon,
+  Moon,
+  Sun,
+  GripVertical,
+  X,
+  CheckCircle,
+  Video,
+  Mic,
+  FileVideo,
+  Info,
+  PauseCircle,
+  ChevronDown,
+  FolderOpen,
+  Gauge,
+  MoreVertical
+} from 'lucide-react';
+
+// --- Types ---
+
+type ConnectionType = 'usb' | 'wifi' | 'offline';
+
+// 接続プロファイル
+interface ConnectionProfile {
+  videoBitrate: number; // Mbps
+  maxFps: number;
+  maxSize: number; // 0 for original
+  videoCodec: 'h264' | 'h265' | 'av1';
+  videoBuffer: number; // ms
+  
+  audioEnabled: boolean;
+  audioBitrate: number; // Kbps
+  audioCodec: 'opus' | 'aac' | 'raw';
+  audioBuffer: number; // ms
+}
+
+interface DeviceSettings {
+  // General
+  autoConnect: boolean;
+  autoSwitchToWifi: boolean;
+  autoSwitchToUsb: boolean;
+  separateSettings: boolean;
+
+  // Profiles
+  usb: ConnectionProfile;
+  wifi: ConnectionProfile;
+
+  // Recording
+  recordVideo: boolean;
+  recordAudio: boolean;
+  recordFormat: 'mp4' | 'mkv';
+  savePath: string;
+}
+
+interface Device {
+  id: string;
+  name: string;
+  serial: string;
+  model: string;
+  status: ConnectionType;
+  ipAddress?: string;
+  isMirroring: boolean;
+  settings: DeviceSettings;
+}
+
+// --- Mock Data ---
+
+const defaultProfile: ConnectionProfile = {
+  videoBitrate: 8,
+  maxFps: 60,
+  maxSize: 0,
+  videoCodec: 'h264',
+  videoBuffer: 50,
+  audioEnabled: true,
+  audioBitrate: 128,
+  audioCodec: 'opus',
+  audioBuffer: 50,
+};
+
+const defaultSettings: DeviceSettings = {
+  autoConnect: true,
+  autoSwitchToWifi: true,
+  autoSwitchToUsb: true,
+  separateSettings: false,
+  usb: { ...defaultProfile },
+  wifi: { ...defaultProfile, videoBitrate: 4, videoBuffer: 200 },
+  recordVideo: false,
+  recordAudio: false,
+  recordFormat: 'mp4',
+  savePath: 'C:\\Users\\User\\Videos\\Scrcpy',
+};
+
+const generateMockDevice = (id: number, type: ConnectionType): Device => {
+  const models = ['Pixel 7', 'Galaxy S23', 'Xperia 1 V', 'Nothing Phone (2)', 'Redmi Note 12'];
+  const name = models[id % models.length];
+  return {
+    id: `dev-${id}`,
+    name: name,
+    serial: `Serial-${1000 + id}`,
+    model: name,
+    status: type,
+    ipAddress: type === 'wifi' ? `192.168.1.${100 + id}` : undefined,
+    isMirroring: false,
+    settings: JSON.parse(JSON.stringify(defaultSettings)),
+  };
+};
+
+// --- UI Components ---
+
+/**
+ * 改良版トグルボタン (iOS Style)
+ */
+const Toggle = ({ 
+  checked, 
+  onChange, 
+  disabled = false,
+  label = ''
+}: { 
+  checked: boolean, 
+  onChange: (checked: boolean) => void, 
+  disabled?: boolean,
+  label?: string
+}) => (
+  <div 
+    className={`flex items-center gap-3 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    onClick={() => !disabled && onChange(!checked)}
+  >
+    <div className={`
+      relative w-11 h-6 rounded-full transition-colors duration-200 ease-in-out flex items-center
+      ${checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}
+    `}>
+      <span className={`
+        block w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ml-1
+        ${checked ? 'translate-x-5' : 'translate-x-0'}
+      `} />
+    </div>
+    {label && <span className="text-sm font-medium">{label}</span>}
+  </div>
+);
+
+const InputWithPresets = ({ 
+  value, 
+  onChange, 
+  presets, 
+  unit = "", 
+  type = "number",
+  isDarkMode 
+}: { 
+  value: string | number, 
+  onChange: (val: any) => void, 
+  presets: { label: string, value: any }[],
+  unit?: string,
+  type?: string,
+  isDarkMode: boolean
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div className="flex">
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`flex-1 min-w-0 p-2 rounded-l border-y border-l focus:ring-2 focus:ring-indigo-500 outline-none ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-300 text-slate-900'}`}
+        />
+        {unit && (
+           <span className={`flex items-center px-3 border-y ${isDarkMode ? 'bg-slate-800 border-slate-600 text-slate-400' : 'bg-slate-100 border-slate-300 text-slate-500'} text-xs`}>
+             {unit}
+           </span>
+        )}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={`px-2 border rounded-r hover:bg-opacity-80 transition-colors ${isDarkMode ? 'bg-slate-600 border-slate-600 hover:bg-slate-500 text-white' : 'bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-600'}`}
+        >
+          <ChevronDown size={16} />
+        </button>
+      </div>
+      
+      {isOpen && (
+        <div className={`absolute z-10 w-full mt-1 rounded shadow-lg max-h-60 overflow-auto border ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-slate-200'}`}>
+          {presets.map((preset, idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                onChange(preset.value);
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-4 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-slate-600 transition-colors ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}
+            >
+              <span className="font-medium">{preset.label}</span>
+              {String(preset.value) !== preset.label && <span className="ml-2 text-xs opacity-50">({preset.value})</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- Settings Modal (Height Stable) ---
+
+const SettingsModal = ({ 
+  device, 
+  isOpen, 
+  onClose, 
+  onSave, 
+  onDelete,
+  isDarkMode 
+}: { 
+  device: Device | null, 
+  isOpen: boolean, 
+  onClose: () => void, 
+  onSave: (id: string, newSettings: DeviceSettings) => void,
+  onDelete: (id: string) => void,
+  isDarkMode: boolean
+}) => {
+  const [activeTab, setActiveTab] = useState<'general' | 'video' | 'audio' | 'record' | 'info'>('general');
+  const [localSettings, setLocalSettings] = useState<DeviceSettings | null>(null);
+  const [editingProfile, setEditingProfile] = useState<'usb' | 'wifi'>('usb');
+
+  useEffect(() => {
+    if (device && isOpen) {
+      setLocalSettings(JSON.parse(JSON.stringify(device.settings)));
+      setActiveTab('general');
+      setEditingProfile('usb');
+    }
+  }, [device, isOpen]);
+
+  if (!isOpen || !device || !localSettings) return null;
+
+  const handleGeneralChange = (field: keyof DeviceSettings, value: any) => {
+    setLocalSettings(prev => prev ? { ...prev, [field]: value } : null);
+  };
+
+  const handleProfileChange = (field: keyof ConnectionProfile, value: any, targetProfile?: 'usb' | 'wifi') => {
+    setLocalSettings(prev => {
+      if (!prev) return null;
+      const target = targetProfile || editingProfile;
+      const newSettings = { ...prev };
+      
+      if (!newSettings.separateSettings) {
+        newSettings.usb = { ...newSettings.usb, [field]: value };
+        newSettings.wifi = { ...newSettings.wifi, [field]: value };
+      } else {
+        newSettings[target] = { ...newSettings[target], [field]: value };
+      }
+      return newSettings;
+    });
+  };
+
+  const tabs = [
+    { id: 'general', label: '一般', icon: Settings },
+    { id: 'video', label: '映像', icon: Video },
+    { id: 'audio', label: '音声', icon: Mic },
+    { id: 'record', label: '録画', icon: FileVideo },
+    { id: 'info', label: '情報', icon: Info },
+  ] as const;
+
+  const currentProfileData = localSettings[editingProfile];
+
+  // Overlay Gridのクラス：アクティブなら表示、それ以外は非表示だが高さ計算には残る
+  const getTabClass = (id: string) => `col-start-1 row-start-1 transition-opacity duration-300 ${activeTab === id ? 'opacity-100 z-10' : 'opacity-0 invisible z-0'}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+      {/* 高さ自動調整のポイント: 
+         - 固定 height (h-[600px]) を削除
+         - max-h-[90vh] で画面からはみ出さないように制限
+      */}
+      <div className={`w-[800px] max-h-[90vh] rounded-2xl shadow-2xl flex flex-col ${isDarkMode ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800'}`}>
+        
+        {/* Header */}
+        <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+          <div className="flex items-center gap-3">
+            <Smartphone className="text-indigo-500" />
+            <div>
+              <h2 className="text-lg font-bold leading-tight">設定: {device.name}</h2>
+              <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{device.serial}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors`}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className={`flex px-6 pt-2 border-b gap-6 flex-shrink-0 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`pb-3 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors ${
+                activeTab === tab.id 
+                  ? 'border-indigo-500 text-indigo-500' 
+                  : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content Area (Stable Height w/ Grid) */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+          
+          {/* プロファイル切り替え (共通UI) */}
+          {localSettings.separateSettings && (activeTab === 'video' || activeTab === 'audio') && (
+            <div className={`flex justify-center mb-6 relative z-20 ${activeTab === 'video' || activeTab === 'audio' ? 'block' : 'hidden'}`}>
+              <div className={`flex p-1 rounded-lg ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>
+                <button
+                  onClick={() => setEditingProfile('usb')}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    editingProfile === 'usb'
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-600 dark:text-white'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  <Cable size={14} /> 有線設定
+                </button>
+                <button
+                  onClick={() => setEditingProfile('wifi')}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    editingProfile === 'wifi'
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-600 dark:text-white'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  <Wifi size={14} /> 無線設定
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Grid Overlay Container */}
+          <div className="grid grid-cols-1">
+            
+            {/* --- Tab: General --- */}
+            <div className={getTabClass('general')}>
+              <div className="space-y-8 max-w-2xl mx-auto">
+                <div className="space-y-6">
+                  <h3 className="text-sm font-bold uppercase tracking-wider opacity-60 border-b pb-2 dark:border-slate-700">自動接続</h3>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">自動接続を有効にする</div>
+                      <div className="text-xs opacity-60 mt-1">デバイス検出時に自動的に接続を試みます</div>
+                    </div>
+                    <Toggle checked={localSettings.autoConnect} onChange={(v) => handleGeneralChange('autoConnect', v)} />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">無線への自動切り替え</div>
+                      <div className="text-xs opacity-60 mt-1">USB接続時に `adb tcpip` を実行し無線接続を確立します</div>
+                    </div>
+                    <Toggle checked={localSettings.autoSwitchToWifi} onChange={(v) => handleGeneralChange('autoSwitchToWifi', v)} />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">有線への自動切り替え</div>
+                      <div className="text-xs opacity-60 mt-1">USB接続が検出された場合、無線接続より優先します</div>
+                    </div>
+                    <Toggle checked={localSettings.autoSwitchToUsb} onChange={(v) => handleGeneralChange('autoSwitchToUsb', v)} />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <h3 className="text-sm font-bold uppercase tracking-wider opacity-60 border-b pb-2 dark:border-slate-700">プロファイル管理</h3>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-900/50">
+                    <div>
+                      <div className="font-medium flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
+                        <Zap size={18} className="text-amber-500" />
+                        有線/無線で別設定にする
+                      </div>
+                      <div className="text-xs opacity-70 mt-1 text-indigo-800 dark:text-indigo-300">
+                        有効にすると、映像・音声設定を有線時と無線時で個別に保存できます。
+                      </div>
+                    </div>
+                    <Toggle checked={localSettings.separateSettings} onChange={(v) => handleGeneralChange('separateSettings', v)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* --- Tab: Video --- */}
+            <div className={getTabClass('video')}>
+              <div className="space-y-6 max-w-2xl mx-auto">
+                {!localSettings.separateSettings && (
+                   <div className="text-xs text-center opacity-50 mb-4">- 共通設定編集中 -</div>
+                )}
+                
+                <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase opacity-60">映像ビットレート</label>
+                    <InputWithPresets 
+                      value={currentProfileData.videoBitrate}
+                      onChange={(v) => handleProfileChange('videoBitrate', Number(v))}
+                      unit="Mbps"
+                      presets={[
+                        { label: '4 Mbps (バランス)', value: 4 },
+                        { label: '8 Mbps (高画質)', value: 8 },
+                        { label: '16 Mbps (最高画質)', value: 16 },
+                      ]}
+                      isDarkMode={isDarkMode}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase opacity-60">最大FPS</label>
+                    <InputWithPresets 
+                      value={currentProfileData.maxFps}
+                      onChange={(v) => handleProfileChange('maxFps', Number(v))}
+                      unit="fps"
+                      presets={[
+                        { label: '30 fps', value: 30 },
+                        { label: '60 fps', value: 60 },
+                        { label: '90 fps', value: 90 },
+                        { label: '120 fps', value: 120 },
+                        { label: '無制限 (0)', value: 0 },
+                      ]}
+                      isDarkMode={isDarkMode}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase opacity-60">最大長辺解像度</label>
+                    <InputWithPresets 
+                      value={currentProfileData.maxSize}
+                      onChange={(v) => handleProfileChange('maxSize', Number(v))}
+                      unit="px"
+                      presets={[
+                        { label: 'オリジナル (0)', value: 0 },
+                        { label: '1920 px (FHD)', value: 1920 },
+                        { label: '1280 px (HD)', value: 1280 },
+                      ]}
+                      isDarkMode={isDarkMode}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase opacity-60">映像コーデック</label>
+                    <select 
+                      value={currentProfileData.videoCodec} 
+                      onChange={(e) => handleProfileChange('videoCodec', e.target.value)}
+                      className={`w-full p-2.5 rounded border focus:ring-2 focus:ring-indigo-500 outline-none ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-slate-300'}`}
+                    >
+                      <option value="h264">H.264 (推奨)</option>
+                      <option value="h265">H.265 (HEVC)</option>
+                      <option value="av1">AV1</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2 col-span-2">
+                    <label className="text-xs font-bold uppercase opacity-60">バッファ時間</label>
+                    <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <InputWithPresets 
+                            value={currentProfileData.videoBuffer}
+                            onChange={(v) => handleProfileChange('videoBuffer', Number(v))}
+                            unit="ms"
+                            presets={[
+                              { label: '0 ms (低遅延)', value: 0 },
+                              { label: '50 ms (推奨)', value: 50 },
+                              { label: '200 ms (安定)', value: 200 },
+                            ]}
+                            isDarkMode={isDarkMode}
+                          />
+                        </div>
+                        <div className="text-xs opacity-50 w-48">
+                          値を上げると遅延が増えますが、カクつきが減ります
+                        </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* --- Tab: Audio --- */}
+            <div className={getTabClass('audio')}>
+               <div className="space-y-6 max-w-2xl mx-auto">
+                 {!localSettings.separateSettings && (
+                   <div className="text-xs text-center opacity-50 mb-4">- 共通設定編集中 -</div>
+                 )}
+
+                 <div className={`flex items-center justify-between p-4 rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="flex items-center gap-3">
+                      <Mic size={20} className={currentProfileData.audioEnabled ? 'text-indigo-500' : 'text-slate-400'} />
+                      <span className="font-medium">音声を転送する</span>
+                    </div>
+                    <Toggle checked={currentProfileData.audioEnabled} onChange={(v) => handleProfileChange('audioEnabled', v)} />
+                 </div>
+
+                 <div className={`space-y-6 transition-all ${currentProfileData.audioEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none filter grayscale'}`}>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase opacity-60">音声ビットレート</label>
+                        <InputWithPresets 
+                          value={currentProfileData.audioBitrate}
+                          onChange={(v) => handleProfileChange('audioBitrate', Number(v))}
+                          unit="Kbps"
+                          presets={[
+                            { label: '128 Kbps (標準)', value: 128 },
+                            { label: '256 Kbps (高音質)', value: 256 },
+                          ]}
+                          isDarkMode={isDarkMode}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase opacity-60">音声コーデック</label>
+                        <select 
+                          value={currentProfileData.audioCodec} 
+                          onChange={(e) => handleProfileChange('audioCodec', e.target.value)}
+                          className={`w-full p-2.5 rounded border focus:ring-2 focus:ring-indigo-500 outline-none ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-slate-300'}`}
+                        >
+                          <option value="opus">Opus (推奨)</option>
+                          <option value="aac">AAC</option>
+                          <option value="raw">RAW</option>
+                        </select>
+                      </div>
+                    </div>
+                 </div>
+               </div>
+            </div>
+
+            {/* --- Tab: Record --- */}
+            <div className={getTabClass('record')}>
+              <div className="space-y-8 max-w-2xl mx-auto">
+                <div className="p-4 rounded-lg bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200 text-sm flex gap-3">
+                  <Info size={20} className="flex-shrink-0" />
+                  <p>録画・録音はミラーリング開始と同時に開始され、終了時にPC上の指定フォルダに保存されます。</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">画面を録画する</span>
+                    <Toggle checked={localSettings.recordVideo} onChange={(v) => handleGeneralChange('recordVideo', v)} />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">音声を録音する</span>
+                    <Toggle checked={localSettings.recordAudio} onChange={(v) => handleGeneralChange('recordAudio', v)} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase opacity-60">保存先フォルダ</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={localSettings.savePath}
+                      onChange={(e) => handleGeneralChange('savePath', e.target.value)}
+                      className={`flex-1 p-2.5 rounded border focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-sm ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-slate-300'}`}
+                    />
+                    <button className={`p-2.5 rounded border hover:bg-opacity-80 transition-colors ${isDarkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-slate-100 border-slate-300 hover:bg-slate-200'}`}>
+                      <FolderOpen size={20} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* --- Tab: Info --- */}
+            <div className={getTabClass('info')}>
+               <div className="space-y-8 max-w-2xl mx-auto">
+                  <div className="space-y-4 p-6 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <div className="grid grid-cols-[120px_1fr] gap-y-4 text-sm">
+                      <div className="opacity-60">デバイス名</div>
+                      <div className="font-mono font-bold">{device.name}</div>
+                      
+                      <div className="opacity-60">モデル</div>
+                      <div>{device.model}</div>
+
+                      <div className="opacity-60">シリアルID</div>
+                      <div className="font-mono">{device.serial}</div>
+
+                      <div className="opacity-60">IPアドレス</div>
+                      <div className="font-mono">{device.ipAddress || '(未接続)'}</div>
+                      
+                      <div className="opacity-60">接続状態</div>
+                      <div className="flex items-center gap-2 font-bold">
+                         {device.status}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-red-200 dark:border-red-900/50">
+                    <h3 className="text-red-600 font-bold mb-2 flex items-center gap-2">
+                      <Trash2 size={18} /> Danger Zone
+                    </h3>
+                    <p className="text-xs text-slate-500 mb-4">このデバイスをリストから削除します。すべての設定は破棄されます。</p>
+                    <button 
+                      onClick={() => onDelete(device.id)}
+                      className="w-full py-3 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors font-bold"
+                    >
+                      デバイスを削除
+                    </button>
+                  </div>
+               </div>
+            </div>
+            
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className={`p-4 border-t flex justify-end gap-3 flex-shrink-0 ${isDarkMode ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'}`}>
+          <button 
+            onClick={onClose}
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${isDarkMode ? 'hover:bg-slate-700 text-slate-300' : 'hover:bg-slate-200 text-slate-600'}`}
+          >
+            キャンセル
+          </button>
+          <button 
+            onClick={() => onSave(device.id, localSettings)}
+            className="px-6 py-2 rounded-lg font-medium text-sm bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition-all flex items-center gap-2"
+          >
+            <CheckCircle size={16} />
+            設定を保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function ScrcpyManagerFinal() {
+  // --- State ---
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [globalAutoConnect, setGlobalAutoConnect] = useState(true);
+  
+  const [devices, setDevices] = useState<Device[]>([
+    generateMockDevice(0, 'usb'),
+    generateMockDevice(1, 'wifi'),
+    generateMockDevice(2, 'offline'),
+  ]);
+  
+  const [notifications, setNotifications] = useState<{id: number, message: string}[]>([]);
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+
+  // Drag & Drop State
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
+  // --- Actions ---
+
+  const addNotification = (msg: string) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message: msg }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 3000);
+  };
+
+  const simulateUsbConnect = () => {
+    const newId = Date.now();
+    const newDevice = generateMockDevice(devices.length, 'usb');
+    setDevices(prev => [...prev, { ...newDevice, id: `dev-${newId}` }]);
+    addNotification(`新しいデバイスを検出: ${newDevice.name}`);
+  };
+
+  const toggleDeviceStatus = (id: string) => {
+    setDevices(prev => prev.map(d => {
+      if (d.id === id) {
+        const nextStatus = d.status === 'offline' ? 'usb' : 'offline';
+        return { ...d, status: nextStatus, isMirroring: false };
+      }
+      return d;
+    }));
+  };
+
+  const toggleMirroring = (id: string) => {
+    setDevices(prev => prev.map(d => {
+      if (d.id === id) {
+        if (d.status === 'offline') {
+          addNotification('エラー: オフラインのデバイスはミラーリングできません');
+          return d;
+        }
+        const newState = !d.isMirroring;
+        if (newState) addNotification(`Scrcpy起動: ${d.name}`);
+        return { ...d, isMirroring: newState };
+      }
+      return d;
+    }));
+  };
+
+  const handleSaveSettings = (id: string, newSettings: DeviceSettings) => {
+    setDevices(prev => prev.map(d => d.id === id ? { ...d, settings: newSettings } : d));
+    setEditingDeviceId(null);
+    addNotification('設定を保存しました');
+  };
+
+  const handleDeleteDevice = (id: string) => {
+    setDevices(prev => prev.filter(d => d.id !== id));
+    setEditingDeviceId(null);
+    addNotification('デバイスを削除しました');
+  };
+
+  // --- Drag & Drop Handlers ---
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    dragItem.current = index;
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    dragOverItem.current = index;
+  };
+
+  const handleDragEnd = () => {
+    const sourceIndex = dragItem.current;
+    const destinationIndex = dragOverItem.current;
+    if (sourceIndex !== null && destinationIndex !== null && sourceIndex !== destinationIndex) {
+      const _devices = [...devices];
+      const draggedItemContent = _devices[sourceIndex];
+      _devices.splice(sourceIndex, 1);
+      _devices.splice(destinationIndex, 0, draggedItemContent);
+      setDevices(_devices);
+      addNotification("優先順位を更新しました");
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
+
+  // --- Render Helpers ---
+
+  // Grid定義: [Grip(32)] [Icon(48)] [Name(1.5fr)] [Status(120)] [Settings(2fr)] [Action(160)]
+  const listGridTemplate = "32px 48px 1.5fr 120px 2fr 160px";
+
+  const DeviceListItem = ({ device, index }: { device: Device, index: number }) => {
+    const activeProfile = (device.status === 'wifi' && device.settings.separateSettings) ? device.settings.wifi : device.settings.usb;
+
+    return (
+      <div 
+        draggable
+        onDragStart={(e) => handleDragStart(e, index)}
+        onDragEnter={(e) => handleDragEnter(e, index)}
+        onDragEnd={handleDragEnd}
+        onDragOver={(e) => e.preventDefault()}
+        className={`
+          grid gap-4 px-4 py-3 items-center group rounded-lg border transition-all duration-200 cursor-default
+          ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-indigo-500' : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-md'}
+          ${device.isMirroring ? 'border-indigo-500 dark:bg-indigo-900/10 bg-indigo-50/10' : ''}
+          ${device.status === 'offline' ? 'opacity-60 grayscale-[0.5]' : ''}
+        `}
+        style={{ gridTemplateColumns: listGridTemplate }}
+      >
+        {/* 0. Drag Handle */}
+        <div className={`flex justify-center cursor-grab active:cursor-grabbing p-1 ${isDarkMode ? 'text-slate-600 hover:text-slate-300' : 'text-slate-300 hover:text-slate-500'}`}>
+          <GripVertical size={20} />
+        </div>
+
+        {/* 1. Icon */}
+        <div className={`
+            w-10 h-10 rounded-lg flex items-center justify-center relative
+            ${device.status === 'usb' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : ''}
+            ${device.status === 'wifi' ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400' : ''}
+            ${device.status === 'offline' ? 'bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500' : ''}
+          `}>
+          <Smartphone size={20} />
+          <div className="absolute -top-1 -left-1 w-4 h-4 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm border border-white dark:border-slate-800">
+            {index + 1}
+          </div>
+        </div>
+
+        {/* 2. Identity */}
+        <div className="min-w-0">
+          <h3 className={`font-bold leading-tight truncate ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{device.name}</h3>
+          <p className={`text-xs font-mono mt-0.5 truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-400'}`}>{device.serial}</p>
+        </div>
+
+        {/* 3. Status */}
+        <div className="text-sm">
+          {device.status === 'usb' && (
+            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> USB
+            </div>
+          )}
+          {device.status === 'wifi' && (
+            <div>
+               <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400 font-medium">
+                <div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> Wi-Fi
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono mt-0.5">{device.ipAddress}</div>
+            </div>
+          )}
+          {device.status === 'offline' && (
+            <div className="flex items-center gap-1.5 text-slate-400 font-medium">
+               <div className="w-1.5 h-1.5 rounded-full bg-slate-400" /> オフライン
+            </div>
+          )}
+        </div>
+
+        {/* 4. Settings Summary (縦積みレイアウト) */}
+        <div className="flex items-center gap-4">
+           {/* Group A: 接続設定 */}
+           <div className="flex flex-col gap-1 min-w-[80px]">
+             <div className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors ${device.settings.autoConnect ? 'text-blue-600 dark:text-blue-400' : 'text-slate-300 dark:text-slate-600'}`}>
+               <Zap size={12} fill={device.settings.autoConnect ? "currentColor" : "none"} />
+               <span>自動接続</span>
+             </div>
+             <div className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors ${device.settings.autoSwitchToWifi ? 'text-purple-600 dark:text-purple-400' : 'text-slate-300 dark:text-slate-600'}`}>
+               <Wifi size={12} />
+               <span>無線化</span>
+             </div>
+           </div>
+
+           {/* Divider */}
+           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
+
+           {/* Group B: 映像設定 */}
+           <div className="flex flex-col gap-1">
+             <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+               <Monitor size={12} />
+               <span>{activeProfile.maxFps === 0 ? 'No Limit' : `${activeProfile.maxFps} fps`}</span>
+             </div>
+             <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+               <Gauge size={12} />
+               <span>{activeProfile.videoBitrate} Mbps</span>
+             </div>
+           </div>
+        </div>
+
+        {/* 5. Primary Actions */}
+        <div className="flex items-center gap-2 justify-end">
+          <button 
+            onClick={() => toggleMirroring(device.id)}
+            disabled={device.status === 'offline'}
+            className={`
+              flex items-center gap-2 py-1.5 px-3 rounded-lg font-bold text-sm transition-all min-w-[100px] justify-center
+              ${device.isMirroring 
+                ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/50' 
+                : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-600'}
+            `}
+          >
+            {device.isMirroring ? <><Power size={14} /> 停止</> : <><Play size={14} /> 開始</>}
+          </button>
+
+          <button 
+            onClick={() => setEditingDeviceId(device.id)}
+            className={`p-2 rounded-lg transition-colors border ${isDarkMode ? 'border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700' : 'border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
+            title="詳細設定"
+          >
+            <Settings size={18} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // --- Main Render ---
+
+  return (
+    <div className={`flex h-screen w-full font-sans overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+      
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Header */}
+        <header className={`border-b px-6 py-4 flex items-center justify-between shadow-sm z-10 transition-colors duration-300 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-600 p-2 rounded-lg">
+              <Monitor className="text-white" size={24} />
+            </div>
+            <div>
+              <h1 className={`text-xl font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Scrcpy Manager</h1>
+              <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>軽量マルチデバイス管理 (Final Design)</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-6">
+            
+            {/* Global Auto Connect Toggle */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+              <span className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                一括自動接続
+              </span>
+              <div 
+                className={`flex items-center gap-1 transition-colors ${globalAutoConnect ? 'text-green-500' : 'text-slate-400'}`}
+                title="全てのデバイスの自動接続を一時的に無効化します"
+              >
+                {globalAutoConnect ? <PauseCircle size={20} className="hidden" /> : <PauseCircle size={20} />}
+                <Toggle checked={globalAutoConnect} onChange={setGlobalAutoConnect} />
+              </div>
+            </div>
+
+            <div className={`h-6 w-px mx-2 ${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
+
+            <div className="hidden md:flex gap-2">
+              <span className={`text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2 ${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-500'}`}>
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                接続中: {devices.filter(d => d.status !== 'offline').length}
+              </span>
+              <span className={`text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2 ${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-500'}`}>
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+                ミラーリング: {devices.filter(d => d.isMirroring).length}
+              </span>
+            </div>
+
+            {/* Theme Toggle */}
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`p-2 rounded-full transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+          </div>
+        </header>
+
+        {/* Device Content */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="flex flex-col gap-3 max-w-5xl mx-auto">
+            {/* List Header (Using Grid for alignment) */}
+            {devices.length > 0 && (
+                <div 
+                  className={`grid gap-4 px-4 text-xs font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                  style={{ gridTemplateColumns: listGridTemplate }}
+                >
+                  <div className="text-center">#</div>
+                  <div></div>
+                  <div>デバイス</div>
+                  <div>接続</div>
+                  <div>設定概要</div>
+                  <div className="text-right pr-2">操作</div>
+                </div>
+            )}
+            
+            {devices.map((device, idx) => (
+              <DeviceListItem key={device.id} device={device} index={idx} />
+            ))}
+
+            {/* Empty State */}
+            {devices.length === 0 && (
+              <div className={`flex flex-col items-center justify-center py-20 border-2 border-dashed rounded-xl ${isDarkMode ? 'border-slate-700 text-slate-600' : 'border-slate-200 text-slate-400'}`}>
+                <Smartphone size={48} className="mb-4 opacity-50" />
+                <p>デバイスがありません</p>
+                <p className="text-sm">USBケーブルを接続してください</p>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* Simulator Sidebar */}
+      <aside className={`w-64 p-6 flex flex-col border-l shadow-xl z-20 transition-colors duration-300 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-800 text-slate-200 border-slate-700'}`}>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Debugging / Simulation</h2>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Cable size={16} /> USB 接続イベント
+            </h3>
+            <button 
+              onClick={simulateUsbConnect}
+              className="w-full bg-slate-700 hover:bg-slate-600 text-xs py-2 px-3 rounded text-left transition-colors flex items-center justify-between group"
+            >
+              <span>新規デバイス接続</span>
+              <span className="opacity-0 group-hover:opacity-100 text-green-400">+</span>
+            </button>
+          </div>
+          <div className="space-y-2">
+             <h3 className="text-sm font-semibold flex items-center gap-2">
+               <ListIcon size={16} /> 状態切替
+             </h3>
+            <div className="space-y-1">
+              {devices.map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => toggleDeviceStatus(d.id)}
+                  className={`
+                    w-full text-xs py-2 px-3 rounded flex items-center justify-between transition-colors
+                    ${d.status === 'offline' ? 'bg-slate-700/50 text-slate-500' : 'bg-slate-700 text-white'}
+                  `}
+                >
+                  <span className="truncate">{d.name}</span>
+                  <div className="flex gap-1">
+                     <span className={`w-2 h-2 rounded-full ${d.status === 'offline' ? 'bg-red-500' : 'bg-green-500'}`} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={!!editingDeviceId}
+        device={devices.find(d => d.id === editingDeviceId) || null}
+        onClose={() => setEditingDeviceId(null)}
+        onSave={handleSaveSettings}
+        onDelete={handleDeleteDevice}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-6 right-80 z-50 flex flex-col gap-2 pointer-events-none">
+        {notifications.map(n => (
+          <div key={n.id} className="bg-slate-800 text-white text-sm py-2 px-4 rounded shadow-lg animate-fade-in-up flex items-center gap-2 border border-slate-700">
+            <div className="w-2 h-2 bg-indigo-500 rounded-full" />
+            {n.message}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
