@@ -4,6 +4,8 @@
   "EnableVideo": false,
   "EnableAudio": true,
   "TurnScreenOffOnStart": false,
-  "BufferMode": "Low Latency",
-  "AdbDeviceSerial": "470808182974"
+  "BufferMode": "High Quality",
+  "AdbDeviceSerial": "192.168.0.160:5555",
+  "WirelessIpAddress": null,
+  "AdbTcpPort": 5555
 }

@@ -1,8 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Management;
 using System.IO;
+using System.Linq;
+using System.Management;
 using System.Text.Json;
 using System.Windows.Forms;
 
@@ -18,6 +19,8 @@ namespace ScrcpyTray
         public bool TurnScreenOffOnStart { get; set; } = false;
         public string BufferMode { get; set; } = "Low Latency"; // "Low Latency" or "High Quality"
         public string? AdbDeviceSerial { get; set; } = null;
+        public string? WirelessIpAddress { get; set; } = null;
+        public int AdbTcpPort { get; set; } = 5555;
     }
 
     static class Program
@@ -31,173 +34,218 @@ namespace ScrcpyTray
         static Process? currentProcess = null;
         static NotifyIcon? trayIcon;
 
-[STAThread]
-static void Main()
-{
-    Application.EnableVisualStyles();
-    Application.SetCompatibleTextRenderingDefault(false);
-
-    // 設定ファイルの読み込み
-    LoadConfig();
-
-    // トレイアイコンの作成
-            trayIcon = new NotifyIcon()
-            {
-                Icon = SystemIcons.Application, // アプリのデフォルトアイコンを使用
-                Visible = true,
-                Text = "NL-ScrcpyTray (待機中)"
-            };
-
-            // コンテキストメニューの構築
-            UpdateContextMenu();
-            // USB監視の開始
-            StartUsbWatcher();
-
-            // アプリケーション実行（メッセージループ）
-            Application.Run();
-            
-            // 終了処理
-            StopScrcpy();
-            if (trayIcon != null)
-            {
-                trayIcon.Visible = false;
-                trayIcon.Dispose();
-            }
-        }
-        static void UpdateContextMenu()
-        {
-            if (trayIcon == null) return;
-
-            ContextMenuStrip menu = new ContextMenuStrip();
-            // 1. 状態表示 & 手動操作
-            var statusItem = new ToolStripMenuItem(currentProcess == null ? "開始" : "停止");
-            statusItem.Font = new Font(statusItem.Font, FontStyle.Bold);
-            statusItem.Click += (s, e) => {
-                if (currentProcess == null) StartScrcpy();
-                else StopScrcpy();
-            };
-            menu.Items.Add(statusItem);
-
-            menu.Items.Add(new ToolStripSeparator());
-// 2. 設定：自動開始
-var autoItem = new ToolStripMenuItem("USB接続で自動開始");
-autoItem.Checked = config.AutoStartOnConnect;
-autoItem.Click += (s, e) => { config.AutoStartOnConnect = !config.AutoStartOnConnect; SaveConfig(); UpdateContextMenu(); };
-menu.Items.Add(autoItem);
-
-// 3. 設定：ビデオ/オーディオ
-var videoItem = new ToolStripMenuItem("画面を共有");
-videoItem.Checked = config.EnableVideo;
-videoItem.Click += (s, e) => { config.EnableVideo = !config.EnableVideo; SaveConfig(); UpdateContextMenu(); };
-menu.Items.Add(videoItem);
-var audioItem = new ToolStripMenuItem("音声を共有");
-audioItem.Checked = config.EnableAudio;
-audioItem.Click += (s, e) => { config.EnableAudio = !config.EnableAudio; SaveConfig(); UpdateContextMenu(); };
-menu.Items.Add(audioItem);
-
-// 4. 設定：画面オフ
-var screenOffItem = new ToolStripMenuItem("端末画面をOFF (-S)");
-screenOffItem.Checked = config.TurnScreenOffOnStart;
-screenOffItem.Click += (s, e) => { config.TurnScreenOffOnStart = !config.TurnScreenOffOnStart; SaveConfig(); UpdateContextMenu(); };
-            menu.Items.Add(screenOffItem);
-
-            menu.Items.Add(new ToolStripSeparator());
-            // 5. バッファ設定テンプレート
-            var bufferMenu = new ToolStripMenuItem("モード設定");
-            
-var lowLatItem = new ToolStripMenuItem("低遅延 (Dev/Game)");
-lowLatItem.Checked = (config.BufferMode == "Low Latency");
-lowLatItem.Click += (s, e) => { config.BufferMode = "Low Latency"; SaveConfig(); UpdateContextMenu(); };
-bufferMenu.DropDownItems.Add(lowLatItem);
-
-var hqItem = new ToolStripMenuItem("高画質 (Media)");
-hqItem.Checked = (config.BufferMode == "High Quality");
-hqItem.Click += (s, e) => { config.BufferMode = "High Quality"; SaveConfig(); UpdateContextMenu(); };
-            bufferMenu.DropDownItems.Add(hqItem);
-menu.Items.Add(bufferMenu);
-
-menu.Items.Add(new ToolStripSeparator());
-
-// 6. 対象デバイス選択
-string fullScrcpyPathForDevices = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, config.ScrcpyPath);
-var devices = AdbHelper.GetConnectedDevices(fullScrcpyPathForDevices);
-
-if (devices.Count > 0)
-{
-    var deviceMenu = new ToolStripMenuItem("対象デバイス");
-
-    var autoSelectItem = new ToolStripMenuItem("自動選択");
-    autoSelectItem.Checked = (config.AdbDeviceSerial == null);
-    autoSelectItem.Click += (s, e) =>
-    {
-        config.AdbDeviceSerial = null;
-        SaveConfig();
-        UpdateContextMenu();
-        RestartScrcpyIfRunning();
-    };
-    deviceMenu.DropDownItems.Add(autoSelectItem);
-    deviceMenu.DropDownItems.Add(new ToolStripSeparator());
-
-    foreach (var device in devices)
-    {
-        string displayName = string.IsNullOrEmpty(device.Model) || device.Model == "Unknown"
-                           ? device.Serial
-                           : $"{device.Model} ({device.Serial})";
-
-        var deviceItem = new ToolStripMenuItem(displayName);
-        deviceItem.Checked = (device.Serial == config.AdbDeviceSerial);
-        deviceItem.Click += (s, e) =>
+        [STAThread]
+        static void Main()
         {
-            config.AdbDeviceSerial = device.Serial;
-            SaveConfig();
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            // 設定ファイルの読み込み
+            LoadConfig();
+
+            // トレイアイコンの作成
+            trayIcon = new NotifyIcon()
+            {
+                Icon = SystemIcons.Application, // アプリのデフォルトアイコンを使用
+                Visible = true,
+                Text = "NL-ScrcpyTray (待機中)"
+            };
+
+            // コンテキストメニューの構築
             UpdateContextMenu();
-            RestartScrcpyIfRunning();
-        };
-        deviceMenu.DropDownItems.Add(deviceItem);
-    }
-    menu.Items.Add(deviceMenu);
-}
+            // USB監視の開始
+            StartUsbWatcher();
 
-// 7. 設定
-var settingsItem = new ToolStripMenuItem("設定...");
-settingsItem.Click += (s, e) => ShowSettingsForm();
-menu.Items.Add(settingsItem);
+            // アプリケーション実行（メッセージループ）
+            Application.Run();
 
-// 8. 終了
-var exitItem = new ToolStripMenuItem("終了");
-exitItem.Click += (s, e) => Application.Exit();
-menu.Items.Add(exitItem);
-trayIcon.ContextMenuStrip = menu;
-}
+            // 終了処理
+            StopScrcpy();
+            if (trayIcon != null)
+            {
+                trayIcon.Visible = false;
+                trayIcon.Dispose();
+            }
+        }
+        static void UpdateContextMenu()
+        {
+            if (trayIcon == null) return;
 
-static void StartScrcpy()
-{
-    if (currentProcess != null) return;
-    if (trayIcon == null) return;
-    string args = "";
+            ContextMenuStrip menu = new ContextMenuStrip();
+            // 1. 状態表示 & 手動操作
+            var statusItem = new ToolStripMenuItem(currentProcess == null ? "開始" : "停止");
+            statusItem.Font = new Font(statusItem.Font, FontStyle.Bold);
+            statusItem.Click += (s, e) =>
+            {
+                if (currentProcess == null) StartScrcpy();
+                else StopScrcpy();
+            };
+            menu.Items.Add(statusItem);
 
-    // デバイス指定
-    if (!string.IsNullOrEmpty(config.AdbDeviceSerial))
-    {
-        args += $" -s {config.AdbDeviceSerial}";
-    }
+            menu.Items.Add(new ToolStripSeparator());
+            // 2. 設定：自動開始
+            var autoItem = new ToolStripMenuItem("USB接続で自動開始");
+            autoItem.Checked = config.AutoStartOnConnect;
+            autoItem.Click += (s, e) => { config.AutoStartOnConnect = !config.AutoStartOnConnect; SaveConfig(); UpdateContextMenu(); };
+            menu.Items.Add(autoItem);
 
-// 基本設定
-if (!config.EnableVideo) args += " --no-video";
-if (!config.EnableAudio) args += " --no-audio";
-if (config.TurnScreenOffOnStart) args += " -S";
+            // 3. 設定：ビデオ/オーディオ
+            var videoItem = new ToolStripMenuItem("画面を共有");
+            videoItem.Checked = config.EnableVideo;
+            videoItem.Click += (s, e) => { config.EnableVideo = !config.EnableVideo; SaveConfig(); UpdateContextMenu(); };
+            menu.Items.Add(videoItem);
+            var audioItem = new ToolStripMenuItem("音声を共有");
+            audioItem.Checked = config.EnableAudio;
+            audioItem.Click += (s, e) => { config.EnableAudio = !config.EnableAudio; SaveConfig(); UpdateContextMenu(); };
+            menu.Items.Add(audioItem);
 
-// テンプレート適用
-if (config.BufferMode == "Low Latency")
-            {
-                args += " --audio-buffer=50 --video-buffer=0 --max-size=1024";
-            }
-            else
-            {
-                args += " --audio-buffer=200 --video-buffer=200 --video-bit-rate=16M";
-            }
-// コンソールなしで起動
-args += " --no-window";
+            // 4. 設定：画面オフ
+            var screenOffItem = new ToolStripMenuItem("端末画面をOFF (-S)");
+            screenOffItem.Checked = config.TurnScreenOffOnStart;
+            screenOffItem.Click += (s, e) => { config.TurnScreenOffOnStart = !config.TurnScreenOffOnStart; SaveConfig(); UpdateContextMenu(); };
+            menu.Items.Add(screenOffItem);
+
+            menu.Items.Add(new ToolStripSeparator());
+            // 5. バッファ設定テンプレート
+            var bufferMenu = new ToolStripMenuItem("モード設定");
+
+            var lowLatItem = new ToolStripMenuItem("低遅延 (Dev/Game)");
+            lowLatItem.Checked = (config.BufferMode == "Low Latency");
+            lowLatItem.Click += (s, e) => { config.BufferMode = "Low Latency"; SaveConfig(); UpdateContextMenu(); };
+            bufferMenu.DropDownItems.Add(lowLatItem);
+
+            var hqItem = new ToolStripMenuItem("高画質 (Media)");
+            hqItem.Checked = (config.BufferMode == "High Quality");
+            hqItem.Click += (s, e) => { config.BufferMode = "High Quality"; SaveConfig(); UpdateContextMenu(); };
+            bufferMenu.DropDownItems.Add(hqItem);
+            menu.Items.Add(bufferMenu);
+
+            menu.Items.Add(new ToolStripSeparator());
+
+            // 6. 対象デバイス選択
+            string fullScrcpyPathForDevices = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, config.ScrcpyPath);
+            var devices = AdbHelper.GetConnectedDevices(fullScrcpyPathForDevices);
+
+            if (devices.Count > 0)
+            {
+                var deviceMenu = new ToolStripMenuItem("対象デバイス");
+
+                var autoSelectItem = new ToolStripMenuItem("自動選択");
+                autoSelectItem.Checked = (config.AdbDeviceSerial == null);
+                autoSelectItem.Click += (s, e) =>
+                {
+                    config.AdbDeviceSerial = null;
+                    SaveConfig();
+                    UpdateContextMenu();
+                    RestartScrcpyIfRunning();
+                };
+                deviceMenu.DropDownItems.Add(autoSelectItem);
+                deviceMenu.DropDownItems.Add(new ToolStripSeparator());
+
+                foreach (var device in devices)
+                {
+                    string displayName = string.IsNullOrEmpty(device.Model) || device.Model == "Unknown"
+                                       ? device.Serial
+                                       : $"{device.Model} ({device.Serial})";
+
+                    var deviceItem = new ToolStripMenuItem(displayName);
+                    deviceItem.Checked = (device.Serial == config.AdbDeviceSerial);
+                    deviceItem.Click += (s, e) =>
+                    {
+                        config.AdbDeviceSerial = device.Serial;
+                        SaveConfig();
+                        UpdateContextMenu();
+                        RestartScrcpyIfRunning();
+                    };
+                    deviceMenu.DropDownItems.Add(deviceItem);
+                }
+
+                // USB接続のデバイスが1台のみの場合、ワイヤレス切り替えメニューを追加
+                var usbDevices = devices.Where(d => !d.IsWireless).ToList();
+                if (usbDevices.Count == 1)
+                {
+                    deviceMenu.DropDownItems.Add(new ToolStripSeparator());
+                    var switchToWirelessItem = new ToolStripMenuItem("ワイヤレスモードに切り替え");
+                    switchToWirelessItem.Click += (s, e) =>
+                    {
+                        var targetDevice = usbDevices.First();
+                        string? ip = AdbHelper.GetDeviceIpAddress(fullScrcpyPathForDevices, targetDevice.Serial);
+                        if (ip == null)
+                        {
+                            trayIcon?.ShowBalloonTip(1000, "エラー", "デバイスのIPアドレスが取得できませんでした。", ToolTipIcon.Error);
+                            return;
+                        }
+
+                        if (AdbHelper.EnableTcpipMode(fullScrcpyPathForDevices, targetDevice.Serial, config.AdbTcpPort))
+                        {
+                            trayIcon?.ShowBalloonTip(1000, "ワイヤレスモード", $"{targetDevice.Model} をワイヤレスモードに設定しました。\nUSBケーブルを抜いてください。", ToolTipIcon.Info);
+
+                            // 少し待ってから接続試行
+                            System.Threading.Thread.Sleep(1000);
+
+                            if (AdbHelper.ConnectWirelessDevice(fullScrcpyPathForDevices, ip, config.AdbTcpPort))
+                            {
+                                trayIcon?.ShowBalloonTip(1000, "接続成功", $"{targetDevice.Model} にワイヤレスで接続しました。", ToolTipIcon.Info);
+                                config.AdbDeviceSerial = $"{ip}:{config.AdbTcpPort}";
+                                SaveConfig();
+                                UpdateContextMenu();
+                                RestartScrcpyIfRunning();
+                            }
+                            else
+                            {
+                                trayIcon?.ShowBalloonTip(1000, "接続失敗", "ワイヤレス接続に失敗しました。", ToolTipIcon.Error);
+                            }
+                        }
+                        else
+                        {
+                            trayIcon?.ShowBalloonTip(1000, "エラー", "TCP/IPモードへの切り替えに失敗しました。", ToolTipIcon.Error);
+                        }
+                    };
+                    deviceMenu.DropDownItems.Add(switchToWirelessItem);
+                }
+                menu.Items.Add(deviceMenu);
+            }
+
+            // 7. 設定
+            var settingsItem = new ToolStripMenuItem("設定...");
+            settingsItem.Click += (s, e) => ShowSettingsForm();
+            menu.Items.Add(settingsItem);
+
+            // 8. 終了
+            var exitItem = new ToolStripMenuItem("終了");
+            exitItem.Click += (s, e) => Application.Exit();
+            menu.Items.Add(exitItem);
+            trayIcon.ContextMenuStrip = menu;
+        }
+
+        static void StartScrcpy()
+        {
+            if (currentProcess != null) return;
+            if (trayIcon == null) return;
+            string args = "";
+
+            // デバイス指定
+            if (!string.IsNullOrEmpty(config.AdbDeviceSerial))
+            {
+                args += $" -s {config.AdbDeviceSerial}";
+            }
+
+            // 基本設定
+            if (!config.EnableVideo) args += " --no-video";
+            if (!config.EnableAudio) args += " --no-audio";
+            if (config.TurnScreenOffOnStart) args += " -S";
+
+            // テンプレート適用
+            if (config.BufferMode == "Low Latency")
+            {
+                args += " --audio-buffer=50 --video-buffer=0 --max-size=1024";
+            }
+            else
+            {
+                args += " --audio-buffer=200 --video-buffer=200 --video-bit-rate=16M";
+            }
+            // コンソールなしで起動
+            args += " --no-window";
 
             // 実行ファイルの場所からの相対パスを解決
             string fullScrcpyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, config.ScrcpyPath);
@@ -267,31 +315,31 @@ args += " --no-window";
 
                     trayIcon.Text = "NL-ScrcpyTray (実行中)";
 
-// デバイス名を取得して通知メッセージを作成
-string deviceName = "不明なデバイス";
-var devices = AdbHelper.GetConnectedDevices(fullScrcpyPath);
-var targetDevice = string.IsNullOrEmpty(config.AdbDeviceSerial)
-    ? devices.FirstOrDefault() // シリアルが指定されていなければ最初のデバイス
-    : devices.FirstOrDefault(d => d.Serial == config.AdbDeviceSerial);
+                    // デバイス名を取得して通知メッセージを作成
+                    string deviceName = "不明なデバイス";
+                    var devices = AdbHelper.GetConnectedDevices(fullScrcpyPath);
+                    var targetDevice = string.IsNullOrEmpty(config.AdbDeviceSerial)
+                        ? devices.FirstOrDefault() // シリアルが指定されていなければ最初のデバイス
+                        : devices.FirstOrDefault(d => d.Serial == config.AdbDeviceSerial);
 
-if (targetDevice != null)
-{
-    deviceName = string.IsNullOrEmpty(targetDevice.Model) || targetDevice.Model == "Unknown"
-               ? targetDevice.Serial
-               : targetDevice.Model;
-}
+                    if (targetDevice != null)
+                    {
+                        deviceName = string.IsNullOrEmpty(targetDevice.Model) || targetDevice.Model == "Unknown"
+                                   ? targetDevice.Serial
+                                   : targetDevice.Model;
+                    }
 
-string notificationMessage = $"{deviceName} への画面転送を開始しました。\nモード: {config.BufferMode}";
-trayIcon.ShowBalloonTip(1000, "実行中", notificationMessage, ToolTipIcon.Info);
+                    string notificationMessage = $"{deviceName} への画面転送を開始しました。\nモード: {config.BufferMode}";
+                    trayIcon.ShowBalloonTip(1000, "実行中", notificationMessage, ToolTipIcon.Info);
 
-UpdateContextMenu();
-}
-}
-catch (Exception ex)
-{
-trayIcon?.ShowBalloonTip(1000, "起動エラー", $"scrcpyの起動に失敗しました。\n{ex.Message}", ToolTipIcon.Error);
-}
-}
+                    UpdateContextMenu();
+                }
+            }
+            catch (Exception ex)
+            {
+                trayIcon?.ShowBalloonTip(1000, "起動エラー", $"scrcpyの起動に失敗しました。\n{ex.Message}", ToolTipIcon.Error);
+            }
+        }
         static void StopScrcpy()
         {
             if (currentProcess != null && !currentProcess.HasExited)
@@ -300,7 +348,7 @@ trayIcon?.ShowBalloonTip(1000, "起動エラー", $"scrcpyの起動に失敗し�
                 currentProcess = null;
             }
             UpdateContextMenu();
-}
+        }
 
         // 設定フォームを開く
         static void ShowSettingsForm()
@@ -328,56 +376,56 @@ trayIcon?.ShowBalloonTip(1000, "起動エラー", $"scrcpyの起動に失敗し�
             }
         }
 
-// 設定をJSONファイルに保存
-static void SaveConfig()
-{
-    try
-    {
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        string jsonString = JsonSerializer.Serialize(config, options);
-        File.WriteAllText(ConfigFileName, jsonString);
-    }
-    catch (Exception ex)
-    {
-        MessageBox.Show("設定の保存に失敗しました: " + ex.Message);
-    }
-}
-
-// JSONファイルから設定を読み込み
-static void LoadConfig()
-{
-    try
-    {
-        if (File.Exists(ConfigFileName))
+        // 設定をJSONファイルに保存
+        static void SaveConfig()
         {
-            string jsonString = File.ReadAllText(ConfigFileName);
-            var loadedConfig = JsonSerializer.Deserialize<AppConfig>(jsonString);
-            if (loadedConfig != null)
+            try
             {
-                config = loadedConfig;
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                string jsonString = JsonSerializer.Serialize(config, options);
+                File.WriteAllText(ConfigFileName, jsonString);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("設定の保存に失敗しました: " + ex.Message);
             }
         }
-        else
-        {
-            // 設定ファイルがなければデフォルトで作成
-            SaveConfig();
-        }
-    }
-    catch (Exception ex)
-    {
-        MessageBox.Show("設定の読み込みに失敗しました: " + ex.Message);
-        // 読み込みに失敗した場合はデフォルト設定で続行
-    }
-}
 
-static void StartUsbWatcher()
-{
+        // JSONファイルから設定を読み込み
+        static void LoadConfig()
+        {
+            try
+            {
+                if (File.Exists(ConfigFileName))
+                {
+                    string jsonString = File.ReadAllText(ConfigFileName);
+                    var loadedConfig = JsonSerializer.Deserialize<AppConfig>(jsonString);
+                    if (loadedConfig != null)
+                    {
+                        config = loadedConfig;
+                    }
+                }
+                else
+                {
+                    // 設定ファイルがなければデフォルトで作成
+                    SaveConfig();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("設定の読み込みに失敗しました: " + ex.Message);
+                // 読み込みに失敗した場合はデフォルト設定で続行
+            }
+        }
+
+        static void StartUsbWatcher()
+        {
             try
             {
                 // USBデバイス変更イベント監視 (接続: EventType=2, 切断: EventType=3)
                 WqlEventQuery query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2 OR EventType = 3");
                 ManagementEventWatcher watcher = new ManagementEventWatcher(query);
-                
+
                 watcher.EventArrived += (s, e) =>
                 {
                     // UIスレッドでコンテキストメニューを安全に更新
@@ -408,5 +456,5 @@ static void StartUsbWatcher()
                 MessageBox.Show("USB監視の初期化に失敗しました: " + ex.Message);
             }
         }
-    }
+    }
 }

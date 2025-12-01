@@ -39,12 +39,20 @@ namespace ScrcpyTray
             this.highQualityRadioButton = new System.Windows.Forms.RadioButton();
             this.lowLatencyRadioButton = new System.Windows.Forms.RadioButton();
             this.deviceTabPage = new System.Windows.Forms.TabPage();
+            this.deviceComboBox = new System.Windows.Forms.ComboBox();
+            this.deviceLabel = new System.Windows.Forms.Label();
+            this.wirelessTabPage = new System.Windows.Forms.TabPage();
+            this.wirelessConnectButton = new System.Windows.Forms.Button();
+            this.wirelessIpTextBox = new System.Windows.Forms.TextBox();
+            this.wirelessIpLabel = new System.Windows.Forms.Label();
             this.saveButton = new System.Windows.Forms.Button();
             this.cancelButton = new System.Windows.Forms.Button();
             this.tabControl.SuspendLayout();
             this.generalTabPage.SuspendLayout();
             this.qualityTabPage.SuspendLayout();
             this.qualityGroupBox.SuspendLayout();
+            this.deviceTabPage.SuspendLayout();
+            this.wirelessTabPage.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabControl
@@ -52,6 +60,7 @@ namespace ScrcpyTray
             this.tabControl.Controls.Add(this.generalTabPage);
             this.tabControl.Controls.Add(this.qualityTabPage);
             this.tabControl.Controls.Add(this.deviceTabPage);
+            this.tabControl.Controls.Add(this.wirelessTabPage);
             this.tabControl.Location = new System.Drawing.Point(12, 12);
             this.tabControl.Name = "tabControl";
             this.tabControl.SelectedIndex = 0;
@@ -167,25 +176,63 @@ namespace ScrcpyTray
             this.deviceTabPage.TabIndex = 2;
             this.deviceTabPage.Text = "デバイス";
             this.deviceTabPage.UseVisualStyleBackColor = true;
-            //
+            // 
             // deviceComboBox
-            //
+            // 
             this.deviceComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.deviceComboBox.FormattingEnabled = true;
             this.deviceComboBox.Location = new System.Drawing.Point(20, 50);
             this.deviceComboBox.Name = "deviceComboBox";
             this.deviceComboBox.Size = new System.Drawing.Size(410, 28);
             this.deviceComboBox.TabIndex = 1;
-            //
+            // 
             // deviceLabel
-            //
+            // 
             this.deviceLabel.AutoSize = true;
             this.deviceLabel.Location = new System.Drawing.Point(20, 20);
             this.deviceLabel.Name = "deviceLabel";
             this.deviceLabel.Size = new System.Drawing.Size(262, 20);
             this.deviceLabel.TabIndex = 0;
             this.deviceLabel.Text = "優先デバイス (複数接続されている場合):";
-            //
+            // 
+            // wirelessTabPage
+            // 
+            this.wirelessTabPage.Controls.Add(this.wirelessConnectButton);
+            this.wirelessTabPage.Controls.Add(this.wirelessIpTextBox);
+            this.wirelessTabPage.Controls.Add(this.wirelessIpLabel);
+            this.wirelessTabPage.Location = new System.Drawing.Point(4, 29);
+            this.wirelessTabPage.Name = "wirelessTabPage";
+            this.wirelessTabPage.Padding = new System.Windows.Forms.Padding(10);
+            this.wirelessTabPage.Size = new System.Drawing.Size(452, 247);
+            this.wirelessTabPage.TabIndex = 3;
+            this.wirelessTabPage.Text = "ワイヤレス";
+            this.wirelessTabPage.UseVisualStyleBackColor = true;
+            // 
+            // wirelessConnectButton
+            // 
+            this.wirelessConnectButton.Location = new System.Drawing.Point(330, 48);
+            this.wirelessConnectButton.Name = "wirelessConnectButton";
+            this.wirelessConnectButton.Size = new System.Drawing.Size(100, 30);
+            this.wirelessConnectButton.TabIndex = 2;
+            this.wirelessConnectButton.Text = "接続";
+            this.wirelessConnectButton.UseVisualStyleBackColor = true;
+            // 
+            // wirelessIpTextBox
+            // 
+            this.wirelessIpTextBox.Location = new System.Drawing.Point(20, 50);
+            this.wirelessIpTextBox.Name = "wirelessIpTextBox";
+            this.wirelessIpTextBox.Size = new System.Drawing.Size(300, 27);
+            this.wirelessIpTextBox.TabIndex = 1;
+            // 
+            // wirelessIpLabel
+            // 
+            this.wirelessIpLabel.AutoSize = true;
+            this.wirelessIpLabel.Location = new System.Drawing.Point(20, 20);
+            this.wirelessIpLabel.Name = "wirelessIpLabel";
+            this.wirelessIpLabel.Size = new System.Drawing.Size(221, 20);
+            this.wirelessIpLabel.TabIndex = 0;
+            this.wirelessIpLabel.Text = "IPアドレスで直接接続 (例: 192.168.1.5):";
+            // 
             // saveButton
             // 
             this.saveButton.Location = new System.Drawing.Point(266, 300);
@@ -228,25 +275,32 @@ namespace ScrcpyTray
             this.qualityGroupBox.PerformLayout();
             this.deviceTabPage.ResumeLayout(false);
             this.deviceTabPage.PerformLayout();
+            this.wirelessTabPage.ResumeLayout(false);
+            this.wirelessTabPage.PerformLayout();
             this.ResumeLayout(false);
+
         }
 
         #endregion
 
         private System.Windows.Forms.TabControl tabControl;
         private System.Windows.Forms.TabPage generalTabPage;
-        private System.Windows.Forms.TabPage qualityTabPage;
-        private System.Windows.Forms.TabPage deviceTabPage;
-        private System.Windows.Forms.Label deviceLabel;
-        private System.Windows.Forms.ComboBox deviceComboBox;
         private System.Windows.Forms.CheckBox autoStartCheckBox;
         private System.Windows.Forms.CheckBox enableVideoCheckBox;
         private System.Windows.Forms.CheckBox enableAudioCheckBox;
         private System.Windows.Forms.CheckBox turnScreenOffCheckBox;
+        private System.Windows.Forms.TabPage qualityTabPage;
         private System.Windows.Forms.GroupBox qualityGroupBox;
         private System.Windows.Forms.RadioButton highQualityRadioButton;
         private System.Windows.Forms.RadioButton lowLatencyRadioButton;
+        private System.Windows.Forms.TabPage deviceTabPage;
+        private System.Windows.Forms.Label deviceLabel;
+        private System.Windows.Forms.ComboBox deviceComboBox;
         private System.Windows.Forms.Button saveButton;
         private System.Windows.Forms.Button cancelButton;
+        private System.Windows.Forms.TabPage wirelessTabPage;
+        private System.Windows.Forms.Button wirelessConnectButton;
+        private System.Windows.Forms.TextBox wirelessIpTextBox;
+        private System.Windows.Forms.Label wirelessIpLabel;
     }
 }
