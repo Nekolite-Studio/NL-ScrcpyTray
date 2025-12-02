@@ -40,12 +40,15 @@ export const SettingsModal = ({
   const [editingProfile, setEditingProfile] = useState<'usbProfile' | 'wifiProfile'>('usbProfile');
 
   useEffect(() => {
+    // モーダルが開かれたとき、または表示するデバイスが変更されたときにのみ状態を初期化する
+    // deviceオブジェクト全体ではなくdevice.idを依存関係に含めることで、
+    // バックグラウンドでのデバイス情報（isMirroringなど）の更新による意図しない再初期化を防ぐ
     if (device && isOpen) {
       setLocalSettings(JSON.parse(JSON.stringify(device.settings)));
       setActiveTab('general');
       setEditingProfile('usbProfile');
     }
-  }, [device, isOpen]);
+  }, [device?.id, isOpen]); // 依存配列をdevice.idに変更
 
   if (!isOpen || !device || !localSettings) return null;
 

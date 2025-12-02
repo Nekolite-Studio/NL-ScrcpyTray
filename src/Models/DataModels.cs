@@ -67,7 +67,7 @@ namespace NL_ScrcpyTray.Models
     {
         public bool GlobalAutoConnect { get; set; } = true;
         public string Theme { get; set; } = "System"; // "Light", "Dark", "System"
-        public List<Device> Devices { get; set; } = new();
+        public List<Device> Devices { get; set; } = [];
     }
 
     /// <summary>

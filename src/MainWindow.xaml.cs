@@ -117,28 +117,66 @@ namespace NL_ScrcpyTray
             _deviceManager = deviceManager;
         }
 
-        public void StartMirroring(string deviceId)
+        public void startMirroring(string deviceId)
         {
             _deviceManager.StartMirroring(deviceId);
         }
 
-        public void StopMirroring(string deviceId)
+        public void stopMirroring(string deviceId)
         {
             _deviceManager.StopMirroring(deviceId);
         }
 
-        public void UpdateSettings(string deviceId, string settingsJson)
+        public void updateSettings(string deviceId, string settingsJson)
         {
-            var settings = JsonSerializer.Deserialize<DeviceSettings>(settingsJson, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            var options = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+            };
+            var settings = JsonSerializer.Deserialize<DeviceSettings>(settingsJson, options);
             if (settings != null)
             {
                 _deviceManager.UpdateDeviceSettings(deviceId, settings);
             }
         }
         
-        public void UpdateDeviceOrder(string[] deviceIds)
+        public void updateDeviceOrder(string deviceIdsJson)
         {
-            _deviceManager.UpdateDeviceOrder(deviceIds);
+            var deviceIds = JsonSerializer.Deserialize<List<string>>(deviceIdsJson);
+            if (deviceIds != null)
+            {
+                _deviceManager.UpdateDeviceOrder(deviceIds);
+            }
+        }
+
+        public void deleteDevice(string deviceId)
+        {
+            _deviceManager.DeleteDevice(deviceId);
+        }
+
+        public string? selectSavePath()
+        {
+            // HACK: OpenFileDialogをフォルダ選択に見せかけるワークアラウンド
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                ValidateNames = false,
+                CheckFileExists = false,
+                CheckPathExists = true,
+                FileName = "フォルダを選択" // ダイアログのファイル名欄に表示
+            };
+
+            string? selectedPath = null;
+            // UIスレッドでダイアログを表示する必要がある
+            _mainWindow.Dispatcher.Invoke(() =>
+            {
+                if (dialog.ShowDialog(_mainWindow) == true)
+                {
+                    selectedPath = Path.GetDirectoryName(dialog.FileName);
+                }
+            });
+            
+            return selectedPath;
         }
     }
 }

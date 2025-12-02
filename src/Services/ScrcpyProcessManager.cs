@@ -10,7 +10,7 @@ namespace NL_ScrcpyTray.Services
     /// </summary>
     public class ScrcpyProcessManager
     {
-        private readonly Dictionary<string, Process> _runningProcesses = new();
+        private readonly Dictionary<string, Process> _runningProcesses = [];
         private readonly string _scrcpyPath;
 
         public ScrcpyProcessManager(string scrcpyPath)
@@ -147,7 +147,7 @@ namespace NL_ScrcpyTray.Services
 
             if (!profile.DisplayEnabled)
             {
-                args.Add("--no-display");
+                args.Add("--no-window");
             }
 
             // Audio settings

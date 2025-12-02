@@ -27,7 +27,7 @@ graph TD
         DeviceManager(DeviceManager.cs)
         ScrcpyProcessManager(ScrcpyProcessManager.cs)
         SettingsManager(SettingsManager.cs)
-        AdbHelper(AdbHelper.cs)
+        AdbService(AdbService.cs)
     end
 
     subgraph "Data & External"
@@ -49,12 +49,12 @@ graph TD
     WpfWindow -- Executes JS --> ReactApp
 
     DeviceManager -- Uses --> SettingsManager
-    DeviceManager -- Uses --> AdbHelper
+    DeviceManager -- Uses --> AdbService
     DeviceManager -- Uses --> ScrcpyProcessManager
     
     SettingsManager -- R/W --> ConfigFile
     ScrcpyProcessManager -- Starts/Stops --> ScrcpyProcess
-    AdbHelper -- Executes --> AdbProcess
+    AdbService -- Executes --> AdbProcess
 
     %% Styling
     style ReactApp fill:#61DAFB,stroke:#333,stroke-width:2px
@@ -72,7 +72,7 @@ graph TD
     -   **WPF Window:** アプリケーションのネイティブウィンドウ。WebView2コントロールをホストします。
     -   **WebView2:** Reactで構築されたWebベースのUIをレンダリングするブラウザエンジン。
     -   **React Frontend:** `frontend/` ディレクトリに格納されたReact/Viteプロジェクト。コンポーネントベースで構築され、デバイスリスト、設定モーダルなどのUIを動的に描画します。バックエンドから受け取ったデバイス接続リストを、**物理デバイス単位に集約するデータ変換ロジック**を含みます。
-    -   **WebView2 Bridge:** React (JavaScript) と C# バックエンド間の通信を仲介する重要な役割を担います。UIからの操作をバックエンドに伝え、バックエンドからの状態変更をUIにプッシュします。
+    -   **WebView2 Bridge:** React (JavaScript) と C# バックエンド間の通信を仲介する重要な役割を担います。UIからの操作（ミラーリング開始/停止、設定保存、**デバイス削除、並べ替え、録画フォルダ選択**など）をバックエンドに伝え、バックエンドからの状態変更をUIにプッシュします。**注意: JavaScript側から呼び出すメソッド名は `camelCase` で統一する必要があります。**
 
 ### 4.2. AppCore (App.xaml.cs)
 
@@ -87,10 +87,10 @@ graph TD
 -   **責務:** **アプリケーションの頭脳。** 接続されている全デバイスの状態を一元管理し、ユーザー操作やイベントに応じて適切な処理をディスパッチします。
 -   **機能:**
     -   `DeviceWatcher` からの物理的な接続/切断イベントを購読します。
-    -   定期的に `AdbHelper.GetConnectedDevices` を実行し、デバイスの状態（USB/Wi-Fi/Offline）を更新します。
+    -   定期的に `AdbService.GetConnectedDevices` を実行し、デバイスの状態（USB/Wi-Fi/Offline）を更新します。
     -   `SettingsManager` から読み込んだ設定に基づき、自動接続、有線/無線ハンドオーバーなどのロジックを実行します。
     -   `WebView2 Bridge` を介して、UIにデバイスリストの変更を通知します。
-    -   UIからの操作（ミラーリング開始/停止、設定変更など）を受け取り、`ScrcpyProcessManager` や `SettingsManager` に処理を委譲します。
+    -   UIからの操作（ミラーリング開始/停止、設定変更、**デバイス削除**など）を受け取り、`ScrcpyProcessManager` や `SettingsManager` に処理を委譲します。
 
 ### 4.4. ScrcpyProcessManager
 
@@ -104,7 +104,7 @@ graph TD
 
 -   **責務:** (WMIによる監視からポーリングに変更) USBデバイスの接続・切断を定期的に検知します。
 -   **機能:**
-    -   `DeviceManager`内の`Timer`により、定期的に`AdbHelper.GetConnectedDevices`を実行し、デバイスリストの差分を検出します。
+    -   `DeviceManager`内の`Timer`により、定期的に`AdbService.GetConnectedDevices`を実行し、デバイスリストの差分を検出します。
 
 ### 4.6. SettingsManager
 
@@ -113,14 +113,13 @@ graph TD
     -   `feature-spec.md` で定義された新しい `settings.json` 構造の読み込みと書き込みを行います。
     -   デバイスの追加、削除、並べ替えなどの操作をサポートします。
 
-### 4.7. AdbHelper (AdbHelper.cs)
+### 4.7. AdbService (AdbService.cs)
 
-### 4.7. AdbHelper (AdbHelper.cs)
-
--   **責務:** `adb.exe` コマンドの実行と、その結果の解析を専門に担当します。デバイスの物理的な接続状態や接続モード（USB/ワイヤレス）に関するロジックは持ちません。
+-   **責務:** `adb.exe` コマンドの実行と、その結果の解析を専門に担当します。特に、**有線・無線接続を同一の物理デバイスとして紐づけるための識別情報取得**という重要な役割を担います。
 -   **機能:**
     -   同梱された `adb.exe` のパスを解決します。
-    -   `adb devices -l`: 接続されているデバイスのリスト（シリアル、モデル名等）を取得します。
+    -   `adb devices -l`: 接続されている全接続ハンドル（`connectionId`）のリストを取得します。
+    -   `adb -s <connectionId> shell getprop ro.serialno`: **（最重要）** 各接続ハンドルに対応する**物理シリアル番号**を取得します。これにより、`192.168.1.5:5555` (無線) と `9A281FFAZ00000` (有線) が同じデバイスであることを特定できます。
     -   `adb tcpip (port)`: 指定されたデバイスをTCP/IPデバッグモードに移行させます。
     -   `adb connect (ip:port)`: 指定されたIPアドレスのデバイスにワイヤレスで接続します。
     -   `adb disconnect (ip:port)`: ワイヤレス接続を切断します。

@@ -10,6 +10,7 @@ const useMockDeviceManager = () => {
     const [devices, setDevices] = useState<DeviceViewModel[]>([]); // Raw device list from C#
     const [globalAutoConnect, setGlobalAutoConnect] = useState(true);
     const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+    
 
     // C#からのデータ更新を受け取るためのグローバル関数
     React.useEffect(() => {
@@ -33,7 +34,8 @@ const useMockDeviceManager = () => {
     };
 
     const updateDeviceOrder = (reorderedIds: string[]) => {
-        (window as any).chrome.webview.hostObjects.bridge.updateDeviceOrder(reorderedIds);
+        const json = JSON.stringify(reorderedIds);
+        (window as any).chrome.webview.hostObjects.bridge.updateDeviceOrder(json);
         
         // Optimistic update for the UI
         const newOrderMap = new Map(reorderedIds.map((id, index) => [id, index]));

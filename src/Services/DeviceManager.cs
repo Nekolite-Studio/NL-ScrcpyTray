@@ -1,5 +1,6 @@
 using NL_ScrcpyTray.Models;
 using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -265,6 +266,27 @@ namespace NL_ScrcpyTray.Services
             _appSettings.Devices = orderedDevices!;
             _settingsManager.Save(_appSettings);
             
+            DeviceListChanged?.Invoke(_managedDeviceVMs);
+        }
+
+        public void DeleteDevice(string deviceId)
+        {
+            // 永続化リストから削除
+            var deviceToRemove = _appSettings.Devices.FirstOrDefault(d => d.Id == deviceId);
+            if (deviceToRemove != null)
+            {
+                _appSettings.Devices.Remove(deviceToRemove);
+                _settingsManager.Save(_appSettings);
+            }
+
+            // メモリ上のViewModelリストから削除
+            var vmToRemove = _managedDeviceVMs.FirstOrDefault(vm => vm.Id == deviceId);
+            if (vmToRemove != null)
+            {
+                _managedDeviceVMs.Remove(vmToRemove);
+            }
+
+            // フロントエンドに通知
             DeviceListChanged?.Invoke(_managedDeviceVMs);
         }
     }

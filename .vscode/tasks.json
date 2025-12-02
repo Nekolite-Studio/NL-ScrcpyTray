@@ -16,9 +16,12 @@
     },
     {
       "label": "start-vite",
-      "type": "npm",
-      "script": "dev",
-      "path": "frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
       "isBackground": true,
       "problemMatcher": {
         "owner": "typescript",

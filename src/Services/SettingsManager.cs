@@ -15,6 +15,7 @@ namespace NL_ScrcpyTray.Services
         public SettingsManager(string configPath)
         {
             _configPath = configPath;
+            Console.WriteLine($"SettingsManager initialized with config path: {_configPath}");
         }
 
         /// <summary>

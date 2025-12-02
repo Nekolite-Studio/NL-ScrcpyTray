@@ -18,12 +18,14 @@ namespace NL_ScrcpyTray
 
             // --- 依存関係の解決 ---
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var scrcpyPath = Path.Combine(baseDir, "scrcpy", "scrcpy.exe");
+            var scrcpyDir = Path.Combine(baseDir, "scrcpy");
+            var scrcpyPath = Path.Combine(scrcpyDir, "scrcpy.exe");
+            var adbPath = Path.Combine(scrcpyDir, "adb.exe");
             var configPath = Path.Combine(baseDir, "settings.json");
 
             var settingsManager = new SettingsManager(configPath);
             _processManager = new ScrcpyProcessManager(scrcpyPath);
-            var adbService = new AdbService(scrcpyPath);
+            var adbService = new AdbService(adbPath);
             _deviceManager = new DeviceManager(settingsManager, _processManager, adbService);
 
             // --- メインウィンドウの作成 ---

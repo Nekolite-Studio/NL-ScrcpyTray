@@ -12,10 +12,12 @@
       "stopAtEntry": false,
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        // 重要: WebView2のリモートデバッグポートを9222に固定して有効化
         "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS": "--remote-debugging-port=9222"
       },
-      "console": "internalConsole"
+      "console": "internalConsole",
+      "presentation": {
+        "hidden": true
+      }
     },
     {
       "name": "React Frontend (Attach)",
@@ -23,12 +25,9 @@
       "request": "attach",
       "port": 9222,
       "webRoot": "${workspaceFolder}/frontend",
-      // WebView2内のローカルホストURLにマッチさせる
       "urlFilter": "http://127.0.0.1:5173/*",
       "presentation": {
-        "hidden": false,
-        "group": "remote",
-        "order": 1
+        "hidden": true
       }
     }
   ],

@@ -71,7 +71,7 @@
 ```json
 {
   "videoEnabled": true,
-  "displayEnabled": true,
+  "displayEnabled": true,  // ウィンドウを表示するかどうか
   "videoBitrate": 8,       // Mbps
   "maxFps": 60,
   "maxSize": 0,            // 0: オリジナル
@@ -103,13 +103,15 @@
       * 最初にマッチしたデバイスの設定 `AutoConnect` が `true` で、かつ `GlobalAutoConnect` も `true` であれば `scrcpy` を起動。
       * **複数同時ミラーリング対応:** 既に他のデバイスが実行中でも、追加で起動する。
 
-### 3.2. スマート・ハンドオーバー (USB → Wi-Fi)
+### 3.2. スマート・ハンドオーバー (USB → Wi-Fi) [v1.xでは未実装]
+
+**注意:** この機能は、安定性の観点から `v1.x` の実装スコープからは除外されています。将来のバージョンでの検討課題となります。
 
 1.  **前提条件:**
       * デバイス設定の `AutoSwitchToWifi` が有効であること。
       * USB接続中に `DeviceManager` がデバイスのIPアドレスを正常に取得・キャッシュしていること。
-2.  **フロー:**
-      * `DeviceManager` がUSB切断を検知 → 即時に `AdbHelper.ConnectWirelessDevice` を実行。
+2.  **フロー (将来構想):**
+      * `DeviceManager` がUSB切断を検知 → 即時に `AdbService.ConnectWirelessDevice` を実行。
       * 接続成功後、`WifiProfile` を適用して `scrcpy` を再起動。
 
 ### 3.3. スマート・ハンドオーバー (Wi-Fi → USB)
