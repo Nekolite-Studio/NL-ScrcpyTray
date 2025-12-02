@@ -22,7 +22,7 @@ namespace NL_ScrcpyTray.Services
         private List<DeviceViewModel> _managedDeviceVMs;
 
         private ManagementEventWatcher? _usbWatcher;
-        private Timer? _pollingTimer;
+        private System.Threading.Timer? _pollingTimer;
 
         public event Action<List<DeviceViewModel>>? DeviceListChanged;
 
@@ -39,7 +39,7 @@ namespace NL_ScrcpyTray.Services
         public void StartMonitoring()
         {
             StartUsbWatcher();
-            _pollingTimer = new Timer(async _ => await PollDevices(), null, 0, 5000); // 5秒ごとに実行
+            _pollingTimer = new System.Threading.Timer(async _ => await PollDevices(), null, 0, 5000); // 5秒ごとに実行
             Task.Run(PollDevices); // 初回即時実行
         }
 

@@ -50,7 +50,7 @@ namespace NL_ScrcpyTray
         {
             if (!e.IsSuccess)
             {
-                MessageBox.Show($"WebView2 creation failed: {e.InitializationException.Message}");
+                System.Windows.MessageBox.Show($"WebView2 creation failed: {e.InitializationException.Message}");
                 return;
             }
 
@@ -103,6 +103,15 @@ namespace NL_ScrcpyTray
             };
             var json = JsonSerializer.Serialize(devices, options);
             await webView.CoreWebView2.ExecuteScriptAsync($"window.updateDeviceList({json})");
+        }
+        
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            // ウィンドウを閉じる操作をキャンセル
+            e.Cancel = true;
+            // ウィンドウを非表示にする
+            this.Hide();
+            base.OnClosing(e);
         }
     }
 
