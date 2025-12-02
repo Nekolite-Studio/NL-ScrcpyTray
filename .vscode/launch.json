@@ -1,16 +1,42 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Launch All (Dev Mode)",
-            "type": "coreclr",
-            "request": "launch",
-            "preLaunchTask": "prelaunch-dev",
-            "program": "${workspaceFolder}/src/bin/Debug/net9.0-windows/src.dll",
-            "args": [],
-            "cwd": "${workspaceFolder}/src",
-            "console": "integratedTerminal",
-            "stopAtEntry": false
-        }
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C# Backend (WPF)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "dev-build",
+      "program": "${workspaceFolder}/src/bin/Debug/net9.0-windows/src.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/src",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        // 重要: WebView2のリモートデバッグポートを9222に固定して有効化
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS": "--remote-debugging-port=9222"
+      },
+      "console": "internalConsole"
+    },
+    {
+      "name": "React Frontend (Attach)",
+      "type": "pwa-msedge",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/frontend",
+      // WebView2内のローカルホストURLにマッチさせる
+      "urlFilter": "http://127.0.0.1:5173/*",
+      "presentation": {
+        "hidden": false,
+        "group": "remote",
+        "order": 1
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Debug (C# + React)",
+      "configurations": ["C# Backend (WPF)", "React Frontend (Attach)"],
+      "stopAll": true
+    }
+  ]
 }
