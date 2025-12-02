@@ -72,20 +72,19 @@ namespace NL_ScrcpyTray
             webView.CoreWebView2.OpenDevToolsWindow();
 #endif
 
-            // 開発時はローカルサーバーを参照することも可能
-            // #if DEBUG
-            // webView.CoreWebView2.Navigate("http://localhost:3000");
-            // #else
+#if DEBUG
+            webView.CoreWebView2.Navigate("http://127.0.0.1:5173");
+#else
             if (Directory.Exists(frontendFolder))
             {
                 // 仮想ホスト経由でアクセス
                 webView.CoreWebView2.Navigate("https://app.nl-scrcpy.local/index.html");
             }
-            // #endif
             else
             {
                 webView.CoreWebView2.NavigateToString("<h1>Error: Frontend directory not found.</h1><p>Please build the frontend project.</p>");
             }
+#endif
         }
 
         private void SetupBridge()

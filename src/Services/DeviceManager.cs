@@ -32,7 +32,7 @@ namespace NL_ScrcpyTray.Services
             _adbService = adbService;
             _appSettings = _settingsManager.Load();
             // 永続化データからViewModelのリストを作成
-            _managedDeviceVMs = _appSettings.Devices.Select(d => new DeviceViewModel(d)).ToList();
+            _managedDeviceVMs = [.. _appSettings.Devices.Select(d => new DeviceViewModel(d))];
         }
 
         public void StartMonitoring()
@@ -82,100 +82,106 @@ namespace NL_ScrcpyTray.Services
             var connectedAdbDevices = _adbService.GetConnectedDevices();
             bool listChanged = false;
 
-            // --- 新規デバイスの追加 ---
-            foreach (var adbDevice in connectedAdbDevices)
+            // ADBからの情報を物理シリアルでグループ化
+            var adbDeviceGroups = connectedAdbDevices.GroupBy(d => d.HardwareSerial).ToList();
+
+            // 永続化されている設定を物理シリアルで辞書化
+            var settingsDict = _appSettings.Devices.ToDictionary(d => d.Serial, d => d);
+
+            var newDeviceVMs = new List<DeviceViewModel>();
+            var allKnownSerials = settingsDict.Keys.Union(adbDeviceGroups.Select(g => g.Key)).ToHashSet();
+
+            foreach (var serial in allKnownSerials)
             {
-                if (!_managedDeviceVMs.Any(vm => vm.Serial == adbDevice.Serial))
+                var adbConnections = adbDeviceGroups.FirstOrDefault(g => g.Key == serial)?.ToList();
+
+                // ViewModelを生成または取得
+                DeviceViewModel vm;
+                if (settingsDict.TryGetValue(serial, out var deviceSettings))
                 {
+                    // 既存の設定からViewModelを作成
+                    vm = new DeviceViewModel(deviceSettings);
+                }
+                else
+                {
+                    // 新規デバイス
+                    var representativeDevice = adbConnections!.First();
                     var newDevice = new Device
                     {
-                        Serial = adbDevice.Serial,
-                        Model = adbDevice.Model,
-                        Name = adbDevice.Model, // 初期名はモデル名
+                        Serial = serial,
+                        Model = representativeDevice.Model,
+                        Name = representativeDevice.Model,
                     };
-                    _appSettings.Devices.Add(newDevice); // 永続化リストに追加
-                    _managedDeviceVMs.Add(new DeviceViewModel(newDevice)); // ViewModelリストに追加
+                    settingsDict[serial] = newDevice; // 新しい設定を辞書に追加
+                    _appSettings.Devices.Add(newDevice); // 永続化リストにも追加
+                    vm = new DeviceViewModel(newDevice);
                     listChanged = true;
                 }
-            }
-            
-            // --- 既存デバイスの状態更新 ---
-            var connectedSerials = connectedAdbDevices.Select(d => d.Serial).ToHashSet();
-            foreach (var vm in _managedDeviceVMs)
-            {
-                var oldStatus = vm.Status;
-                
-                var adbDevice = connectedAdbDevices.FirstOrDefault(d => d.Serial == vm.Serial);
-                if (adbDevice != null) // adbで認識されている
+
+                var oldStatus = _managedDeviceVMs.FirstOrDefault(oldVm => oldVm.Serial == serial)?.Status ?? ConnectionStatus.Offline;
+
+                // 接続状態を更新
+                if (adbConnections != null && adbConnections.Any())
                 {
-                    vm.Status = _adbService.IsWifiDevice(adbDevice.Serial) ? ConnectionStatus.Wifi : ConnectionStatus.Usb;
-                    
-                    // USB接続時にIPアドレスをキャッシュする
-                    if (vm.Status == ConnectionStatus.Usb && vm.IpAddress == null)
+                    bool hasUsb = false;
+                    bool hasWifi = false;
+                    foreach (var conn in adbConnections)
                     {
-                        Task.Run(async () => {
-                            vm.IpAddress = await Task.Run(() => _adbService.GetDeviceIpAddress(vm.Serial));
-                            // Note: この変更をUIに即時反映させるには、さらにイベントが必要になるが、
-                            //       次のポーリングサイクルでいずれ反映されるため、一旦このまま実装する。
-                        });
+                        if (conn.ConnectionType == ConnectionStatus.Usb)
+                        {
+                            hasUsb = true;
+                            vm.UsbConnectionId = conn.ConnectionId;
+                        }
+                        else if (conn.ConnectionType == ConnectionStatus.Wifi)
+                        {
+                            hasWifi = true;
+                            vm.WifiConnectionId = conn.ConnectionId;
+                            var ipMatch = System.Text.RegularExpressions.Regex.Match(conn.ConnectionId, @"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})");
+                            if (ipMatch.Success) vm.IpAddress = ipMatch.Groups[1].Value;
+                        }
                     }
+                    if (hasUsb && hasWifi) vm.Status = ConnectionStatus.UsbAndWifi;
+                    else if (hasUsb) vm.Status = ConnectionStatus.Usb;
+                    else vm.Status = ConnectionStatus.Wifi;
                 }
-                else // adbで認識されていない
+                else
                 {
                     vm.Status = ConnectionStatus.Offline;
+                }
+                
+                // ミラーリング状態を引き継ぐ
+                var oldVm = _managedDeviceVMs.FirstOrDefault(oldVm => oldVm.Serial == serial);
+                if (oldVm != null)
+                {
+                    vm.IsMirroring = _processManager.IsProcessRunning(oldVm.Id);
                 }
 
                 if (oldStatus != vm.Status)
                 {
                     listChanged = true;
+                    // --- スマートハンドオーバー (Wi-Fi -> USB) ---
+                    if (vm.Settings.AutoSwitchToUsb && vm.IsMirroring && oldStatus == ConnectionStatus.Wifi && (vm.Status == ConnectionStatus.Usb || vm.Status == ConnectionStatus.UsbAndWifi))
+                    {
+                         Console.WriteLine($"Handover to USB for {vm.Name}");
+                        _processManager.Stop(vm.Id);
+                        _processManager.Start(vm);
+                    }
                 }
+                newDeviceVMs.Add(vm);
             }
-            
-            if (listChanged)
-            {
-                // 永続化するのはデバイスの順序と追加されたデバイス情報のみ
-                _appSettings.Devices = _managedDeviceVMs.Select(vm => new Device {
-                    Id = vm.Id,
-                    Name = vm.Name,
-                    Serial = vm.Serial,
-                    Model = vm.Model,
-                    IpAddress = vm.IpAddress, // キャッシュしたIPを保存
-                    Settings = vm.Settings
-                }).ToList();
 
+            // 順序を維持しつつリストを更新
+            var orderedVMs = newDeviceVMs.OrderBy(vm => _appSettings.Devices.FindIndex(d => d.Serial == vm.Serial)).ToList();
+            
+            // 変更があったか最終チェック
+            if (listChanged || !_managedDeviceVMs.SequenceEqual(orderedVMs))
+            {
+                _managedDeviceVMs = orderedVMs;
                 _settingsManager.Save(_appSettings);
                 DeviceListChanged?.Invoke(_managedDeviceVMs);
             }
 
-            // --- 自動化ロジックの実行 ---
-            await HandleSmartHandover(connectedAdbDevices);
             await HandleAutoConnection();
-        }
-
-        private Task HandleSmartHandover(List<AdbService.AdbDevice> connectedAdbDevices)
-        {
-            foreach (var vm in _managedDeviceVMs)
-            {
-                // --- Wi-Fi -> USB ハンドオーバー ---
-                if (vm.Settings.AutoSwitchToUsb && vm.Status == ConnectionStatus.Wifi && vm.IsMirroring)
-                {
-                    // 同一シリアルのUSB接続があるかチェック
-                    if (connectedAdbDevices.Any(d => d.Serial == vm.Serial && !_adbService.IsWifiDevice(d.Serial)))
-                    {
-                        Console.WriteLine($"Handover to USB for {vm.Name}");
-                        _processManager.Stop(vm.Id); // Wi-Fiプロセスを停止
-                        vm.Status = ConnectionStatus.Usb; // 状態をUSBに更新
-                        _processManager.Start(vm); // USBプロファイルで再起動
-                        DeviceListChanged?.Invoke(_managedDeviceVMs);
-                    }
-                }
-
-                // --- USB -> Wi-Fi ハンドオーバー ---
-                // このロジックはPollDevices内の状態変化検知と組み合わせる必要があるため、
-                // PollDevicesメソッド内に直接記述する方が状態管理がシンプルになる。
-                // ここでは一旦省略し、リファクタリングの余地ありとする。
-            }
-            return Task.CompletedTask;
         }
 
         private Task HandleAutoConnection()
@@ -207,6 +213,8 @@ namespace NL_ScrcpyTray.Services
             if (vm != null && vm.Status != ConnectionStatus.Offline)
             {
                 _processManager.Start(vm);
+                // IsMirroring状態を即時反映させる
+                vm.IsMirroring = true;
                 DeviceListChanged?.Invoke(_managedDeviceVMs);
             }
         }

@@ -1,7 +1,9 @@
-export type ConnectionStatus = 'Offline' | 'Usb' | 'Wifi';
+export type ConnectionStatus = 'Offline' | 'Usb' | 'Wifi' | 'UsbAndWifi';
 
 // 接続プロファイル
 export interface ConnectionProfile {
+  videoEnabled: boolean;
+  displayEnabled: boolean;
   videoBitrate: number; // Mbps
   maxFps: number;
   maxSize: number; // 0 for original
@@ -50,3 +52,6 @@ export interface DeviceViewModel {
   status: ConnectionStatus;
   isMirroring: boolean;
 }
+
+// この型はバックエンドで集約されるようになったため不要
+// export interface GroupedDeviceViewModel { ... }

@@ -1,67 +1,16 @@
 {
-    // IntelliSense を使用して利用可能な属性を学べます。
-    // 既存の属性の説明をホバーして表示します。
-    // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-       {
-           "name": "Launch Frontend (npm dev)",
-           "type": "node",
-           "request": "launch",
-           "cwd": "${workspaceFolder}/frontend",
-           "runtimeExecutable": "npm",
-           "runtimeArgs": [
-               "run",
-               "dev"
-           ],
-           "skipFiles": [
-               "<node_internals>/**"
-           ],
-           "console": "integratedTerminal",
-           "outputCapture": "std",
-           "presentation": {
-               "hidden": false,
-               "group": "frontend",
-               "order": 1
-           }
-       },
-       {
-           "name": "Launch Backend (.NET WPF)",
-           "type": "coreclr",
-           "request": "launch",
-           "preLaunchTask": "build-dotnet",
-           "program": "${workspaceFolder}/src/bin/Debug/net9.0-windows/src.dll",
-           "args": [],
-           "cwd": "${workspaceFolder}/src",
-           "console": "integratedTerminal",
-           "stopAtEntry": false,
-           "presentation": {
-               "hidden": false,
-               "group": "backend",
-               "order": 1
-           }
-       },
-       {
-           "name": "Launch All (Frontend + Backend)",
-           "type": "node",
-           "request": "launch",
-           "cwd": "${workspaceFolder}/frontend",
-           "runtimeExecutable": "npm",
-           "runtimeArgs": [
-               "run",
-               "dev"
-           ],
-           "skipFiles": [
-               "<node_internals>/**"
-           ],
-           "console": "integratedTerminal",
-           "outputCapture": "std",
-           "preLaunchTask": "build-all",
-           "presentation": {
-               "hidden": false,
-               "group": "all",
-               "order": 1
-           }
-       }
+        {
+            "name": "Launch All (Dev Mode)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "prelaunch-dev",
+            "program": "${workspaceFolder}/src/bin/Debug/net9.0-windows/src.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
+        }
     ]
 }

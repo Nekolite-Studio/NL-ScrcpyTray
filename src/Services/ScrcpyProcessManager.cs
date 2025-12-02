@@ -33,7 +33,7 @@ namespace NL_ScrcpyTray.Services
                 ? deviceVM.Settings.WifiProfile
                 : deviceVM.Settings.UsbProfile;
 
-            var args = BuildArguments(deviceVM.Serial, profile);
+            var args = BuildArguments(deviceVM, profile);
 
             var psi = new ProcessStartInfo
             {
@@ -98,26 +98,57 @@ namespace NL_ScrcpyTray.Services
         /// </summary>
         public void StopAll()
         {
-            foreach (var deviceId in _runningProcesses.Keys)
+            // ToList() を使ってキーのコレクションのコピーを作成し、反復処理中のコレクション変更エラーを回避
+            foreach (var deviceId in _runningProcesses.Keys.ToList())
             {
                 Stop(deviceId);
             }
         }
 
-        private string BuildArguments(string serial, ConnectionProfile profile)
+        /// <summary>
+        /// 指定されたデバイスIDのプロセスが現在実行中かどうかを確認します。
+        /// </summary>
+        public bool IsProcessRunning(string deviceId)
         {
+            return _runningProcesses.TryGetValue(deviceId, out var process) && !process.HasExited;
+        }
+
+        private string BuildArguments(DeviceViewModel vm, ConnectionProfile profile)
+        {
+            // 接続状態に応じて使用するシリアルを決定する
+            // USBが利用可能なら常にUSBを優先する
+            var serialToUse = vm.Status switch
+            {
+                ConnectionStatus.Usb => vm.UsbConnectionId,
+                ConnectionStatus.UsbAndWifi => vm.UsbConnectionId,
+                ConnectionStatus.Wifi => vm.WifiConnectionId,
+                _ => vm.Serial // フォールバック
+            };
+
             var args = new List<string>
             {
-                $"-s {serial}",
-                "--no-window" // コンソールウィンドウは表示しない
+                $"-s {serialToUse}",
+                //"--no-window" // デバッグ用に一時的にウィンドウを表示
             };
 
             // Video settings
-            if (profile.MaxSize > 0) args.Add($"--max-size={profile.MaxSize}");
-            if (profile.VideoBitrate > 0) args.Add($"--video-bit-rate={profile.VideoBitrate}M");
-            if (profile.MaxFps > 0) args.Add($"--max-fps={profile.MaxFps}");
-            if (profile.VideoBuffer > 0) args.Add($"--video-buffer={profile.VideoBuffer}");
-            if (!string.IsNullOrEmpty(profile.VideoCodec)) args.Add($"--video-codec={profile.VideoCodec}");
+            if (!profile.VideoEnabled)
+            {
+                args.Add("--no-video");
+            }
+            else
+            {
+                if (profile.MaxSize > 0) args.Add($"--max-size={profile.MaxSize}");
+                if (profile.VideoBitrate > 0) args.Add($"--video-bit-rate={profile.VideoBitrate}M");
+                if (profile.MaxFps > 0) args.Add($"--max-fps={profile.MaxFps}");
+                if (profile.VideoBuffer > 0) args.Add($"--video-buffer={profile.VideoBuffer}");
+                if (!string.IsNullOrEmpty(profile.VideoCodec)) args.Add($"--video-codec={profile.VideoCodec}");
+            }
+
+            if (!profile.DisplayEnabled)
+            {
+                args.Add("--no-display");
+            }
 
             // Audio settings
             if (profile.AudioEnabled)

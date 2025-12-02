@@ -1,7 +1,8 @@
 import React from 'react';
 import { DeviceSettings, ConnectionProfile } from '../../types';
-import { Cable, Wifi } from 'lucide-react';
+import { Video, Monitor } from 'lucide-react';
 import { InputWithPresets } from '../common/InputWithPresets';
+import { Toggle } from '../common/Toggle';
 
 
 interface VideoTabProps {
@@ -43,8 +44,25 @@ export const VideoTab = ({ settings, onChange, isDarkMode, editingProfile, setEd
             {!settings.separateSettings && (
                 <div className="text-xs text-center opacity-50 mb-4">- 共通設定編集中 -</div>
             )}
+
+            <div className="space-y-4">
+                <div className={`flex items-center justify-between p-4 rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="flex items-center gap-3">
+                        <Video size={20} className={currentProfileData.videoEnabled ? 'text-indigo-500' : 'text-slate-400'} />
+                        <span className="font-medium">映像を転送する</span>
+                    </div>
+                    <Toggle checked={currentProfileData.videoEnabled} onChange={(v) => handleProfileChange('videoEnabled', v)} />
+                </div>
+                <div className={`flex items-center justify-between p-4 rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="flex items-center gap-3">
+                        <Monitor size={20} className={currentProfileData.displayEnabled ? 'text-indigo-500' : 'text-slate-400'} />
+                        <span className="font-medium">ウィンドウを表示する</span>
+                    </div>
+                    <Toggle checked={currentProfileData.displayEnabled} onChange={(v) => handleProfileChange('displayEnabled', v)} />
+                </div>
+            </div>
             
-            <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+            <div className={`grid grid-cols-2 gap-x-8 gap-y-6 transition-all ${currentProfileData.videoEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none filter grayscale'}`}>
                 <div className="space-y-2">
                     <label className="text-xs font-bold uppercase opacity-60">映像ビットレート</label>
                     <InputWithPresets

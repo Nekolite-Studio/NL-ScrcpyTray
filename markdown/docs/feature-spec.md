@@ -70,16 +70,18 @@
 
 ```json
 {
-  "VideoBitrate": 8,       // Mbps
-  "MaxFps": 60,
-  "MaxSize": 0,            // 0: オリジナル
-  "VideoCodec": "h264",    // "h264", "h265", "av1"
-  "VideoBuffer": 50,       // ms
+  "videoEnabled": true,
+  "displayEnabled": true,
+  "videoBitrate": 8,       // Mbps
+  "maxFps": 60,
+  "maxSize": 0,            // 0: オリジナル
+  "videoCodec": "h264",    // "h264", "h265", "av1"
+  "videoBuffer": 50,       // ms
 
-  "AudioEnabled": true,
-  "AudioBitrate": 128,     // Kbps
-  "AudioCodec": "opus",    // "opus", "aac", "raw"
-  "AudioBuffer": 50        // ms
+  "audioEnabled": true,
+  "audioBitrate": 128,     // Kbps
+  "audioCodec": "opus",    // "opus", "aac", "raw"
+  "audioBuffer": 50        // ms
 }
 ```
 
@@ -135,7 +137,9 @@
       * 登録デバイスを**カード形式**でリスト表示。
       * **ドラッグ＆ドロップ**による優先順位の並べ替え機能。
       * 各カードに [ミラーリング開始/停止] ボタン、[詳細設定] ボタンを配置。
-      * 接続状態 (USB/Wi-Fi/Offline)、ミラーリング状態、設定概要を視覚的に表示。
+      * **接続状態:** `USB`, `Wi-Fi`, `USB+Wi-Fi`, `Offline` の4状態を視覚的に表示。
+      * **デバイス情報:** デバイス名の下に、Wi-Fi接続時はIPアドレスを表示。
+      * ミラーリング状態、設定概要を視覚的に表示。
 
 ### 4.2. 詳細設定モーダル (React App)
 

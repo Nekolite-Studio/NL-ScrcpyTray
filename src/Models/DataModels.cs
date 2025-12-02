@@ -11,7 +11,8 @@ namespace NL_ScrcpyTray.Models
     {
         Offline,
         Usb,
-        Wifi
+        Wifi,
+        UsbAndWifi
     }
 
     /// <summary>
@@ -31,6 +32,18 @@ namespace NL_ScrcpyTray.Models
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public ConnectionStatus Status { get; set; } = ConnectionStatus.Offline;
         public bool IsMirroring { get; set; } = false;
+
+        /// <summary>
+        /// USB接続時の接続ID。DeviceManagerによって更新される。
+        /// </summary>
+        [JsonIgnore]
+        public string? UsbConnectionId { get; set; }
+
+        /// <summary>
+        /// Wi-Fi接続時の接続ID。DeviceManagerによって更新される。
+        /// </summary>
+        [JsonIgnore]
+        public string? WifiConnectionId { get; set; }
 
         // コンストラクタ
         public DeviceViewModel(Device device)
@@ -89,6 +102,10 @@ namespace NL_ScrcpyTray.Models
     /// </summary>
     public class ConnectionProfile
     {
+        [JsonPropertyName("videoEnabled")]
+        public bool VideoEnabled { get; set; } = true;
+        [JsonPropertyName("displayEnabled")]
+        public bool DisplayEnabled { get; set; } = true;
         public int VideoBitrate { get; set; } = 8;       // Mbps
         public int MaxFps { get; set; } = 60;
         public int MaxSize { get; set; } = 0;            // 0: オリジナル

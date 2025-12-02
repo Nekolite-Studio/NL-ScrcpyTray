@@ -31,6 +31,7 @@ namespace NL_ScrcpyTray.Services
 
         /// <summary>
         /// 現在PCに接続されているAndroidデバイスのリストを取得します。
+        /// このメソッドは、各接続ハンドルから実際のハードウェアシリアルを取得し、物理デバイス単位での識別に利用できるようにします。
         /// </summary>
         public List<AdbDevice> GetConnectedDevices()
         {
@@ -38,27 +39,34 @@ namespace NL_ScrcpyTray.Services
             string output = ExecuteAdbCommand("devices -l");
 
             var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                              .Where(line => !line.StartsWith("List of devices"));
+                              .Where(line => !line.StartsWith("List of devices") && line.Contains("device") && !line.Contains("unauthorized"));
 
             foreach (var line in lines)
             {
-                if (line.Contains("device") && !line.Contains("unauthorized"))
+                var connectionIdMatch = Regex.Match(line, @"^([a-zA-Z0-9\._:\-]+)\s+");
+                if (!connectionIdMatch.Success) continue;
+                
+                var connectionId = connectionIdMatch.Groups[1].Value;
+                
+                // 物理シリアル番号を取得
+                var hardwareSerial = ExecuteAdbCommand($"-s {connectionId} shell getprop ro.serialno").Trim();
+                Console.WriteLine($"Device {connectionId} has hardware serial: {hardwareSerial}");
+                if (string.IsNullOrEmpty(hardwareSerial))
                 {
-                    var serialMatch = Regex.Match(line, @"^([a-zA-Z0-9\._:\-]+)\s+");
-                    var modelMatch = Regex.Match(line, @"model:(\S+)");
-
-                    if (serialMatch.Success)
-                    {
-                        // AdbDeviceはModels名前空間のものを直接利用する想定
-                        // ただし、DataModels.csで定義したDeviceクラスとは異なるので注意
-                        // ここでは一時的な情報運搬用としてAdbDeviceクラスを内部定義する
-                        devices.Add(new AdbDevice
-                        {
-                            Serial = serialMatch.Groups[1].Value,
-                            Model = modelMatch.Success ? modelMatch.Groups[1].Value : "Unknown",
-                        });
-                    }
+                    // `ro.serialno` が取得できないケース (一部のエミュレータ等) は一旦スキップ
+                    Console.WriteLine($"Could not get hardware serial for {connectionId}. Skipping.");
+                    continue;
                 }
+
+                var modelMatch = Regex.Match(line, @"model:(\S+)");
+                
+                devices.Add(new AdbDevice
+                {
+                    ConnectionId = connectionId,
+                    HardwareSerial = hardwareSerial,
+                    Model = modelMatch.Success ? modelMatch.Groups[1].Value : "Unknown",
+                    ConnectionType = IsWifiDevice(connectionId) ? ConnectionStatus.Wifi : ConnectionStatus.Usb
+                });
             }
             return devices;
         }
@@ -139,20 +147,35 @@ namespace NL_ScrcpyTray.Services
         }
         
         /// <summary>
-        /// 指定されたシリアルがIPアドレス形式（Wi-Fi接続）かどうかを判定します。
+        /// 指定された接続IDがWi-Fi接続（IPアドレス形式またはTLS接続形式）かどうかを判定します。
         /// </summary>
-        public bool IsWifiDevice(string serial)
+        public bool IsWifiDevice(string connectionId)
         {
-            return Regex.IsMatch(serial, @"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+");
+            // IPアドレス形式 (例: 192.168.1.5:5555) または mDNS/TLS形式 (例: adb-serial-xyz._adb-tls-connect._tcp)
+            return connectionId.Contains(":") || connectionId.Contains("_tcp");
         }
 
         /// <summary>
-        /// ADBからのデバイス情報を保持する内部クラス。
+        /// ADBからのデバイス情報を保持する内部クラス。物理デバイスの識別情報を含む。
         /// </summary>
         public class AdbDevice
         {
-            public string Serial { get; set; } = "";
+            /// <summary>
+            /// adbが認識する接続ID (例: "PR6DB6C6YTLFA6T8" や "adb-PR6DB6..._tcp")
+            /// </summary>
+            public string ConnectionId { get; set; } = "";
+            /// <summary>
+            /// デバイス固有の物理シリアル番号 (ro.serialno)
+            /// </summary>
+            public string HardwareSerial { get; set; } = "";
+            /// <summary>
+            /// デバイスのモデル名
+            /// </summary>
             public string Model { get; set; } = "";
+            /// <summary>
+            /// この接続IDが示す接続方法
+            /// </summary>
+            public ConnectionStatus ConnectionType { get; set; } = ConnectionStatus.Offline;
         }
     }
 }

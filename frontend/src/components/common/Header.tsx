@@ -26,8 +26,10 @@ export const Header = ({
     onToggleTheme,
     onToggleGlobalAutoConnect
 }: HeaderProps) => {
-    const connectedCount = devices.filter(d => d.status !== 'Offline').length;
-    const mirroringCount = devices.filter(d => d.isMirroring).length;
+    // devicesがundefinedの場合でも空配列として扱い、エラーを防ぐ
+    const safeDevices = devices ?? [];
+    const connectedCount = safeDevices.filter(d => d.status !== 'Offline').length;
+    const mirroringCount = safeDevices.filter(d => d.isMirroring).length;
 
     return (
         <header className={`border-b px-6 py-4 flex items-center justify-between shadow-sm z-10 transition-colors duration-300 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>

@@ -6,9 +6,9 @@ import { Smartphone } from 'lucide-react';
 interface DeviceListProps {
     devices: DeviceViewModel[];
     isDarkMode: boolean;
-    onToggleMirroring: (id: string) => void;
+    onToggleMirroring: (id:string) => void;
     onOpenSettings: (id: string) => void;
-    onUpdateDeviceOrder: (reorderedDevices: DeviceViewModel[]) => void;
+    onUpdateDeviceOrder: (reorderedIds: string[]) => void;
 }
 
 export const DeviceList = ({ 
@@ -35,11 +35,12 @@ export const DeviceList = ({
         const sourceIndex = dragItem.current;
         const destinationIndex = dragOverItem.current;
         if (sourceIndex !== null && destinationIndex !== null && sourceIndex !== destinationIndex) {
-            const _devices = [...devices];
-            const draggedItemContent = _devices[sourceIndex];
-            _devices.splice(sourceIndex, 1);
-            _devices.splice(destinationIndex, 0, draggedItemContent);
-            onUpdateDeviceOrder(_devices);
+            const reordered = [...devices];
+            const [draggedItem] = reordered.splice(sourceIndex, 1);
+            reordered.splice(destinationIndex, 0, draggedItem);
+            // シリアルではなく、永続化に使われるIdの順序をバックエンドに渡す
+            const reorderedIds = reordered.map(d => d.id);
+            onUpdateDeviceOrder(reorderedIds);
         }
         dragItem.current = null;
         dragOverItem.current = null;
