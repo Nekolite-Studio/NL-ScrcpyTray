@@ -47,25 +47,34 @@ namespace NL_ScrcpyTray.Services
                 if (!connectionIdMatch.Success) continue;
                 
                 var connectionId = connectionIdMatch.Groups[1].Value;
-                
-                // 物理シリアル番号を取得
-                var hardwareSerial = ExecuteAdbCommand($"-s {connectionId} shell getprop ro.serialno").Trim();
-                Console.WriteLine($"Device {connectionId} has hardware serial: {hardwareSerial}");
-                if (string.IsNullOrEmpty(hardwareSerial))
-                {
-                    // `ro.serialno` が取得できないケース (一部のエミュレータ等) は一旦スキップ
-                    Console.WriteLine($"Could not get hardware serial for {connectionId}. Skipping.");
-                    continue;
-                }
-
                 var modelMatch = Regex.Match(line, @"model:(\S+)");
+                var model = modelMatch.Success ? modelMatch.Groups[1].Value : "Unknown";
+                var isWifi = IsWifiDevice(connectionId);
+                
+                string hardwareSerial;
+
+                if (isWifi)
+                {
+                    // Wi-Fi接続の場合のみ、物理シリアルを問い合わせる
+                    hardwareSerial = ExecuteAdbCommand($"-s {connectionId} shell getprop ro.serialno").Trim();
+                    if (string.IsNullOrEmpty(hardwareSerial))
+                    {
+                        Console.WriteLine($"Could not get hardware serial for Wi-Fi device {connectionId}. Skipping.");
+                        continue;
+                    }
+                }
+                else
+                {
+                    // USB接続の場合、connectionIdが物理シリアルそのものである
+                    hardwareSerial = connectionId;
+                }
                 
                 devices.Add(new AdbDevice
                 {
                     ConnectionId = connectionId,
                     HardwareSerial = hardwareSerial,
-                    Model = modelMatch.Success ? modelMatch.Groups[1].Value : "Unknown",
-                    ConnectionType = IsWifiDevice(connectionId) ? ConnectionStatus.Wifi : ConnectionStatus.Usb
+                    Model = model,
+                    ConnectionType = isWifi ? ConnectionStatus.Wifi : ConnectionStatus.Usb
                 });
             }
             return devices;

@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:NL_ScrcpyTray"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         mc:Ignorable="d"
-        Title="NL-ScrcpyTray" Height="800" Width="1200">
+        Title="NL-ScrcpyTray" Width="850" Height="850" MinWidth="850" MinHeight="300">
     <Grid>
         <wv2:WebView2 Name="webView" />
     </Grid>

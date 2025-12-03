@@ -113,6 +113,19 @@ namespace NL_ScrcpyTray.Services
             return _runningProcesses.TryGetValue(deviceId, out var process) && !process.HasExited;
         }
 
+        /// <summary>
+        /// いずれかのscrcpyプロセスが実行中かどうかを確認します。
+        /// </summary>
+        public bool IsAnyProcessRunning()
+        {
+            // プロセスリストをクリーンアップしてから確認
+            _runningProcesses.Where(kvp => kvp.Value.HasExited)
+                             .Select(kvp => kvp.Key)
+                             .ToList()
+                             .ForEach(key => _runningProcesses.Remove(key));
+            return _runningProcesses.Count > 0;
+        }
+
         private string BuildArguments(DeviceViewModel vm, ConnectionProfile profile)
         {
             // 接続状態に応じて使用するシリアルを決定する

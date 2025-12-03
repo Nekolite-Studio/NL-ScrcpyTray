@@ -24,6 +24,7 @@ graph TD
         WpfWindow[WPF Window]
         WebView2[WebView2 Browser]
         AppCore(App / App.xaml.cs)
+        TrayMenuManager(TrayMenuManager.cs)
         DeviceManager(DeviceManager.cs)
         ScrcpyProcessManager(ScrcpyProcessManager.cs)
         SettingsManager(SettingsManager.cs)
@@ -41,6 +42,10 @@ graph TD
     WebView2 -- renders --> ReactApp
     
     AppCore -- Manages --> WpfWindow
+    AppCore -- Manages --> TrayMenuManager
+    
+    TrayMenuManager -- Uses --> DeviceManager
+    TrayMenuManager -- Uses --> SettingsManager
     
     ReactApp -- Calls JS Functions --> WebView2Bridge(WebView2 Bridge)
     WebView2Bridge -- Calls C# Methods --> DeviceManager
@@ -76,12 +81,12 @@ graph TD
 
 ### 4.2. AppCore (App.xaml.cs)
 
--   **責務:** **タスクトレイアイコンを主体とした**WPFアプリケーションのライフサイクル管理と、バックエンドサービスの初期化を担当します。
+-   **責務:** WPFアプリケーションのライフサイクル管理と、各バックエンドサービスの初期化および連携の調整を担当します。
 -   **機能:**
-    -   アプリケーション起動時に、各マネージャークラス（`DeviceManager` など）をインスタンス化します。
-    -   タスクトレイに常駐アイコン (`NotifyIcon`) を生成し、コンテキストメニュー（設定画面の表示、終了など）を構成します。
-    -   メインウィンドウ (`WpfWindow`) は直接表示せず、ユーザーの操作に応じて表示・非表示を切り替えます。
-    -   アプリケーションの終了（`Shutdown()`）は、コンテキストメニューから明示的に実行された場合にのみ行われます。
+    -   アプリケーション起動時に、`DeviceManager`, `TrayMenuManager` を含む各マネージャークラスをインスタンス化します。
+    -   タスクトレイの管理は `TrayMenuManager` に完全に委譲します。
+    -   メインウィンドウ (`WpfWindow`) は直接表示せず、ユーザーの操作（タスクトレイアイコンのダブルクリックなど）に応じて表示・非表示を切り替えます。
+    -   アプリケーションの終了処理（`Shutdown()`）を管理します。
 
 ### 4.3. DeviceManager (New)
 
@@ -126,6 +131,15 @@ graph TD
     -   `adb disconnect (ip:port)`: ワイヤレス接続を切断します。
     -   `adb shell ip addr show wlan0`: デバイスのローカルIPアドレスを取得します。
 
+### 4.8. TrayMenuManager (TrayMenuManager.cs)
+
+-   **責務:** タスクトレイアイコン (`NotifyIcon`) の生成、ライフサイクル管理、およびコンテキストメニューの構築と更新を専門に担当します。
+-   **機能:**
+    -   `DeviceManager` からのイベントを購読し、接続されているデバイスのリストをコンテキストメニューに動的に生成します。
+    -   メニュー項目には、ミラーリング状態（チェックマーク）や接続状態（USB/Wi-Fi）が表示されます。
+    -   ユーザーのクリック操作をハンドルし、`DeviceManager` を介してミラーリングの開始/停止、全プロセスの停止などのコマンドを実行します。
+    -   `SettingsManager` と連携し、「自動接続」などのグローバル設定をメニューから直接変更・保存します。
+
 ## 5. ディレクトリ構成
 
 ポータブルアプリケーションとしての利便性を最大化するため、以下のディレクトリ構成を採用します。
@@ -145,12 +159,7 @@ graph TD
 
 ## 6. 将来の設計方針 (リファクタリング)
 
-現状、すべてのロジックは `Program.cs` 内の `static` メソッドとして実装されています。これは初期段階のプロトタイプとしては有効ですが、機能が複雑化するにつれて見通しが悪くなります。
-
-今後の開発では、以下の指針で責務をクラスに分割していくことを推奨します。
-
 -   **`ScrcpyController.cs`:** `ScrcpyProcessManager` と `SettingsManager` のロジックを統合し、`scrcpy` の起動・停止に関するすべての責務を担います。
--   **`TrayMenuManager.cs`:** `NotifyIcon` のコンテキストメニュー構築と更新に関するロジックを分離します。
 -   **`AppService.cs`:** アプリケーションのメインループと、各クラスのインスタンス化および連携を管理します。
 
 これにより、各クラスが単一責任の原則に従い、テスト容易性と保守性が向上します。

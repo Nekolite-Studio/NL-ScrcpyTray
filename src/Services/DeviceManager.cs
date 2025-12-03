@@ -289,5 +289,30 @@ namespace NL_ScrcpyTray.Services
             // フロントエンドに通知
             DeviceListChanged?.Invoke(_managedDeviceVMs);
         }
+
+        public void ToggleMirroring(string deviceId)
+        {
+            var vm = _managedDeviceVMs.FirstOrDefault(d => d.Id == deviceId);
+            if (vm == null) return;
+
+            if (vm.IsMirroring)
+            {
+                StopMirroring(deviceId);
+            }
+            else
+            {
+                StartMirroring(deviceId);
+            }
+        }
+
+        public void StopAllMirroring()
+        {
+            _processManager.StopAll();
+            foreach (var vm in _managedDeviceVMs)
+            {
+                vm.IsMirroring = false;
+            }
+            DeviceListChanged?.Invoke(_managedDeviceVMs);
+        }
     }
 }

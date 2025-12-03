@@ -26,15 +26,15 @@ export const GeneralTab = ({ settings, onChange, isDarkMode }: GeneralTabProps) 
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium">無線への自動切り替え</div>
-                    <div className="text-xs opacity-60 mt-1">USB接続時に `adb tcpip` を実行し無線接続を確立します</div>
+                    <div className="text-xs opacity-60 mt-1">ミラーリング中、USBが切断されると自動で無線接続に切り替えます</div>
                   </div>
                   <Toggle checked={settings.autoSwitchToWifi} onChange={(v) => onChange({ autoSwitchToWifi: v })} />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium">有線への自動切り替え</div>
-                    <div className="text-xs opacity-60 mt-1">USB接続が検出された場合、無線接続より優先します</div>
+                    <div className="font-medium">有線を優先</div>
+                    <div className="text-xs opacity-60 mt-1">USBと無線両方で接続されている場合、USBを優先します</div>
                   </div>
                   <Toggle checked={settings.autoSwitchToUsb} onChange={(v) => onChange({ autoSwitchToUsb: v })} />
                 </div>
